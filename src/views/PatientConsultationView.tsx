@@ -36,7 +36,7 @@ export default function PatientConsultationView({ state, onOpenReport }: Patient
   return (
     <div className="space-y-8 pb-12">
       <div>
-        <h2 className="text-2xl font-bold text-[#191c1e]">{t.sidebar.patientConsult}</h2>
+        <h2 className="text-2xl font-bold text-[#191c1e]">{t.patientConsult.pageTitle}</h2>
         <p className="text-sm text-gray-500">{t.patientConsult.desc}</p>
       </div>
 

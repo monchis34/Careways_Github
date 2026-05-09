@@ -33,7 +33,7 @@ export default function Sidebar({ role, activeView, onViewChange, onLogout }: Si
   const getNavItems = () => {
     const items = [];
 
-    // ALL ROLES: Clinical Consultation (for Clinicians) or Dashboard (for Analysts)
+    // ALL ROLES: Clinical Insights (for Clinicians) or Dashboard (for Analysts)
     if (role === 'Analyst' || role === 'Administrator' || role === 'Admin/Analyst') {
       items.push({ icon: LayoutDashboard, label: t.sidebar.dashboard, id: 'dashboard' });
       items.push({ icon: LineChart, label: t.sidebar.unitAnalyst, id: 'unit_analyst' });

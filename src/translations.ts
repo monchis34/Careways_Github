@@ -276,7 +276,7 @@ export const translations = {
       access: "Access Portal"
     },
     sidebar: {
-      clinicalConsult: "Clinical Consultation",
+      clinicalConsult: "Clinical Insights",
       patientRegistry: "Patient Registry",
       manageUsers: "User Management",
       clinicalUsers: "Clinical Users",
@@ -285,7 +285,7 @@ export const translations = {
       settings: "Settings",
       signOut: "Sign Out",
       dashboard: "Dashboard",
-      patientConsult: "Clinical Consultation",
+      patientConsult: "Case Consultation",
       unitAnalyst: "Unit Analyst"
     },
     massiveTasks: {
@@ -415,6 +415,7 @@ export const translations = {
       ageMonths: "Age (Months)"
     },
     patientConsult: {
+      pageTitle: "Patient Profile",
       desc: "Secure access to clinical records and outcomes (HIPAA Compliant).",
       searchPlaceholder: "Search by Patient Hash (e.g. PT-***-892A)",
       noRecords: "No records found",
@@ -653,7 +654,7 @@ export const translations = {
     authorize: "Autorizar y Finalizar",
     processing: "Procesando...",
     awaitingSignature: "Esperando Firma",
-    unitOverview: "Resumen de la Unidad",
+    unitOverview: "Unit Overview",
     unitOverviewDesc: "Analítica de desempeño clínico e impacto educativo en tiempo real.",
     patientRegistry: "Registro de Pacientes",
     patientRegistryDesc: "Registros centralizados de pacientes y resultados clínicos.",
@@ -885,7 +886,7 @@ export const translations = {
       access: "Acceder al Portal"
     },
     sidebar: {
-      clinicalConsult: "Consulta Clínica",
+      clinicalConsult: "Clinical Insights",
       patientRegistry: "Registro Pacientes",
       manageUsers: "Gestión Usuarios",
       clinicalUsers: "Usuarios Clínicos",
@@ -894,7 +895,7 @@ export const translations = {
       settings: "Ajustes",
       signOut: "Cerrar Sesión",
       dashboard: "Dashboard",
-      patientConsult: "Consulta Clínica", // Replaced for consistency with requested name
+      patientConsult: "Case Consultation",
       unitAnalyst: "Analista de Unidad"
     },
     massiveTasks: {
@@ -1024,6 +1025,7 @@ export const translations = {
       ageMonths: "Edad (Meses)"
     },
     patientConsult: {
+      pageTitle: "Patient Profile",
       desc: "Acceso seguro a registros clínicos y resultados (Cumple con HIPAA).",
       searchPlaceholder: "Buscar por Hash de Paciente (ej. PT-***-892A)",
       noRecords: "No se encontraron registros",
