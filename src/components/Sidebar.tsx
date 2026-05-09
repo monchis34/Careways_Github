@@ -41,12 +41,18 @@ export default function Sidebar({ role, activeView, onViewChange, onLogout }: Si
       items.push({ icon: Activity, label: t.sidebar.patientRegistry, id: 'registry' });
       items.push({ icon: Users, label: t.sidebar.manageUsers, id: 'users' });
       items.push({ icon: Settings, label: t.sidebar.settings, id: 'settings' });
-    } else if (['Clinician', 'ClinicalTrainer'].includes(role)) {
+    } else if (['Clinician', 'ClinicalTrainer', 'ClinicalUser'].includes(role)) {
       items.push({ icon: LayoutDashboard, label: t.sidebar.clinicalConsult, id: 'dashboard' });
       
       if (role === 'Clinician') {
         items.push({ icon: Activity, label: t.sidebar.patientRegistry, id: 'registry' });
         items.push({ icon: Users, label: t.sidebar.manageUsers, id: 'users' });
+        items.push({ icon: Settings, label: t.sidebar.settings, id: 'settings' });
+      }
+
+      if (role === 'ClinicalUser') {
+        items.push({ icon: Activity, label: t.sidebar.patientRegistry, id: 'registry' });
+        items.push({ icon: Search, label: t.sidebar.patientConsult, id: 'patient_consult' }); // For Patient Search?
         items.push({ icon: Settings, label: t.sidebar.settings, id: 'settings' });
       }
 

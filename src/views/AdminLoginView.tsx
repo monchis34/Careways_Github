@@ -10,7 +10,8 @@ import {
   Settings, 
   BarChart3,
   ArrowRight,
-  ArrowLeft
+  ArrowLeft,
+  Stethoscope
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLanguage } from '../App';
@@ -31,6 +32,13 @@ export default function AdminLoginView({ onLogin, onBack }: AdminLoginViewProps)
       color: 'bg-blue-600',
       desc: t.adminLogin.trainerDesc
     },
+    {
+      role: 'ClinicalUser',
+      display: t.roles.ClinicalUser,
+      icon: Stethoscope,
+      color: 'bg-indigo-600',
+      desc: t.adminLogin.clinicalUserDesc
+    },
     { 
       role: 'Administrator', 
       display: t.roles.Administrator,
@@ -49,7 +57,7 @@ export default function AdminLoginView({ onLogin, onBack }: AdminLoginViewProps)
 
   return (
     <div className="min-h-screen bg-[#f7f9fb] flex items-center justify-center p-6">
-      <div className="max-w-5xl w-full">
+      <div className="max-w-7xl w-full">
         <button onClick={onBack} className="flex items-center gap-2 text-gray-500 font-bold mb-12 hover:text-[#00236f] transition-colors">
           <ArrowLeft className="w-5 h-5" />
           <span>{t.adminLogin.backToHome}</span>
@@ -63,7 +71,7 @@ export default function AdminLoginView({ onLogin, onBack }: AdminLoginViewProps)
           <p className="text-gray-500 max-w-md mx-auto">{t.adminLogin.selectProfile}</p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {adminRoles.map((item, index) => (
             <motion.button
               key={item.role}

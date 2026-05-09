@@ -18,6 +18,7 @@ import PatientRegistryView from './views/PatientRegistryView';
 import MainLandingPage from './views/MainLandingPage';
 import RegisterFlow from './views/RegisterFlow';
 import AdminLoginView from './views/AdminLoginView';
+import PatientReportView from './views/PatientReportView';
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import { motion, AnimatePresence } from 'motion/react';
@@ -43,6 +44,7 @@ export default function App() {
 
   // Views: landing -> registration -> internal_login -> app
   const [activeView, setActiveView] = useState<string>('landing');
+  const [activePatientHash, setActivePatientHash] = useState<string | null>(null);
   
   const [state, setState] = useState<AppState>(() => {
     const seed = generateSeedData();
@@ -62,7 +64,7 @@ export default function App() {
         institutionId: role === 'Administrator' ? 'inst-1' : 'inst-2' // Mock assignment
       }
     }));
-    setActiveView(role === 'Clinician' ? 'registry' : 'dashboard');
+    setActiveView(role === 'Clinician' || role === 'Administrator' || role === 'ClinicalTrainer' || role === 'ClinicalUser' ? 'registry' : 'dashboard');
   };
 
   const handleRegistrationComplete = (userData: any) => {
@@ -148,14 +150,30 @@ export default function App() {
     if (activeView === 'users') return <UserManagementView state={state} onBulkUpload={bulkAddUsers} />;
     if (activeView === 'unit_analyst') return <UnitAnalystView state={state} />;
     if (activeView === 'clinical_users') return <ClinicalUserManagementView />;
-    if (activeView === 'patient_consult') return <PatientConsultationView state={state} />;
+    if (activeView === 'patient_consult') return <PatientConsultationView state={state} onOpenReport={(hash) => { setActivePatientHash(hash); setActiveView('report'); }} />;
     if (activeView === 'settings') return <div className="p-8 text-center bg-white rounded-3xl border border-dashed border-gray-200">Settings Section (Under Construction)</div>;
     
+    if (activeView === 'report' && activePatientHash) {
+      return <PatientReportView state={state} patientHash={activePatientHash} onBack={() => { setActiveView(state.currentUser?.role === 'Clinician' || state.currentUser?.role === 'ClinicalUser' ? 'registry' : 'dashboard'); setActivePatientHash(null); }} />;
+    }
+
+    if (activeView === 'bulk') {
+      return (
+        <PatientRegistryView 
+          state={state} 
+          onComplete={addPatientData} 
+          onBulkComplete={bulkAddPatients} 
+          defaultMode="bulk" 
+          onNavigate={(view) => setActiveView(view)} 
+        />
+      );
+    }
+    if (activeView === 'individual') {
+      return <ClinicianFlow onComplete={(p, o, pp) => { addPatientData(p, o, pp); setActiveView('registry'); }} onExit={() => setActiveView('registry')} role={state.currentUser?.role} state={state} />;
+    }
+
     if (activeView === 'registry') {
-      if (state.currentUser?.role === 'Clinician') {
-        return <ClinicianFlow onComplete={addPatientData} onBulkComplete={bulkAddPatients} role={state.currentUser?.role} state={state} />;
-      }
-      return <PatientRegistryView state={state} onComplete={addPatientData} onBulkComplete={bulkAddPatients} />;
+      return <PatientRegistryView state={state} onComplete={addPatientData} onBulkComplete={bulkAddPatients} defaultMode="list" onNavigate={(view, hash) => { if (hash) setActivePatientHash(hash); setActiveView(view); }} />;
     }
 
     if (activeView === 'education') return <CaregiverView role={state.currentUser?.role || 'Guest'} />;
@@ -184,7 +202,7 @@ export default function App() {
       <div className="flex h-screen bg-[#f7f9fb] overflow-hidden font-sans">
         <Sidebar role={state.currentUser.role} onLogout={handleLogout} activeView={activeView} onViewChange={setActiveView} />
         <div className="flex-1 flex flex-col min-w-0">
-          <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} />
+          <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} />
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
             <AnimatePresence mode="wait">
               <motion.div

@@ -21,9 +21,10 @@ import { cn } from '../lib/utils';
 
 interface PatientConsultationViewProps {
   state: AppState;
+  onOpenReport?: (patientHash: string) => void;
 }
 
-export default function PatientConsultationView({ state }: PatientConsultationViewProps) {
+export default function PatientConsultationView({ state, onOpenReport }: PatientConsultationViewProps) {
   const { t } = useLanguage();
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -56,7 +57,7 @@ export default function PatientConsultationView({ state }: PatientConsultationVi
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {searchResults.map(p => (
-          <PatientRecordCard key={p.id} patient={p} state={state} />
+          <PatientRecordCard key={p.id} patient={p} state={state} onOpenReport={onOpenReport} />
         ))}
       </div>
 
@@ -87,9 +88,10 @@ interface PatientRecordCardProps {
   patient: any;
   state: AppState;
   key?: string | number;
+  onOpenReport?: (patientHash: string) => void;
 }
 
-function PatientRecordCard({ patient, state }: PatientRecordCardProps) {
+function PatientRecordCard({ patient, state, onOpenReport }: PatientRecordCardProps) {
   const { t } = useLanguage();
   const outcome = state.outcomes.find(o => o.patientHash === patient.patientHash);
   const parent = state.parentPatients.find(p => p.patientHash === patient.patientHash);
@@ -154,7 +156,10 @@ function PatientRecordCard({ patient, state }: PatientRecordCardProps) {
         </div>
       </div>
       
-      <button className="w-full py-4 bg-gray-50 border-t border-[#eceef0] text-[#00236f] font-bold text-sm hover:bg-[#00236f] hover:text-white transition-colors">
+      <button 
+        onClick={() => onOpenReport && onOpenReport(patient.patientHash)}
+        className="w-full py-4 bg-gray-50 border-t border-[#eceef0] text-[#00236f] font-bold text-sm hover:bg-[#00236f] hover:text-white transition-colors"
+      >
         {t.patientConsult.openFullReport}
       </button>
     </div>

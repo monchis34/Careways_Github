@@ -83,6 +83,8 @@ export function generateSeedData() {
 
     patients.push({
       id: Math.random().toString(36).substr(2, 9),
+      identifier: `${Math.floor(Math.random() * 100000000)}`,
+      gender: ['Male', 'Female'][Math.floor(Math.random() * 2)],
       mrn,
       name: `Patient Name ${i}`,
       birthDate: '2020-01-01',

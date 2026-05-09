@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-export type UserRole = 'Clinician' | 'Admin/Analyst' | 'Caregiver' | 'ClinicalTrainer' | 'Administrator' | 'Analyst' | 'Guest';
+export type UserRole = 'Clinician' | 'Admin/Analyst' | 'Caregiver' | 'ClinicalTrainer' | 'ClinicalUser' | 'Administrator' | 'Analyst' | 'Guest';
 
 export type PatientType = 'Neonatal' | 'Pediatric' | 'Adult';
 
@@ -11,9 +11,11 @@ export type RegistrationType = 'ClinicalUser' | 'ParentPatient' | 'Guest';
 
 export interface Patient {
   id: string; // Internal UUID
+  identifier: string; // Patient Identification Number
   name: string; // [OBLIGATORIO - Texto]
   mrn: string; // Medical Record Number (Encrypted/Hidden)
   type: PatientType;
+  gender: string;
   birthDate: string; // [OBLIGATORIO]
   admissionDate: string;
   dischargeDate: string;

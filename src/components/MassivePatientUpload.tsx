@@ -115,6 +115,8 @@ export default function MassivePatientUpload({ state, onComplete, onClose }: Mas
           // Basic Patient Object
           const newPatient: Patient = {
             id: Math.random().toString(36).substr(2, 9),
+            identifier: mrn, // default mock
+            gender: 'Unknown',
             mrn: mrn,
             name: `Patient ${mrn}`,
             birthDate: '2020-01-01',
