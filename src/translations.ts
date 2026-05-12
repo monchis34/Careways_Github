@@ -273,7 +273,18 @@ export const translations = {
       clinicianDesc: "Register patients and capture clinical outcomes.",
       analystDesc: "Analyze trends and institutional settings.",
       caregiverDesc: "Access post-discharge educational resources.",
-      access: "Access Portal"
+      access: "Access Portal",
+      welcomeBack: "Welcome Back",
+      signInToContinue: "Sign in to continue your learning journey",
+      institutionalEmail: "Institutional Email",
+      password: "Password",
+      rememberMe: "Remember me",
+      forgotPassword: "Forgot password?",
+      signIn: "Sign In",
+      or: "or",
+      ssoLogin: "Login with Hospital SSO",
+      noAccount: "Don't have an account?",
+      requestAccess: "Request Access"
     },
     sidebar: {
       clinicalConsult: "Clinical Insights",
@@ -883,7 +894,18 @@ export const translations = {
       clinicianDesc: "Registre pacientes y capture resultados clínicos.",
       analystDesc: "Analice tendencias y configuraciones institucionales.",
       caregiverDesc: "Acceda a recursos educativos post-alta.",
-      access: "Acceder al Portal"
+      access: "Acceder al Portal",
+      welcomeBack: "Bienvenido de nuevo",
+      signInToContinue: "Inicia sesión para continuar tu aprendizaje",
+      institutionalEmail: "Correo Institucional",
+      password: "Contraseña",
+      rememberMe: "Recuérdame",
+      forgotPassword: "¿Olvidaste tu contraseña?",
+      signIn: "Iniciar Sesión",
+      or: "o",
+      ssoLogin: "Iniciar sesión con SSO Hospitalario",
+      noAccount: "¿No tienes cuenta?",
+      requestAccess: "Solicitar Acceso"
     },
     sidebar: {
       clinicalConsult: "Clinical Insights",

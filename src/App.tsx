@@ -45,6 +45,7 @@ export default function App() {
   // Views: landing -> registration -> internal_login -> app
   const [activeView, setActiveView] = useState<string>('landing');
   const [activePatientHash, setActivePatientHash] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   
   const [state, setState] = useState<AppState>(() => {
     const seed = generateSeedData();
@@ -69,10 +70,12 @@ export default function App() {
 
   const handleRegistrationComplete = (userData: any) => {
     // In a real app, this would create the user in DB
+    setIsAuthenticated(true);
     handleLogin(userData.role);
   };
 
   const handleLogout = () => {
+    setIsAuthenticated(false);
     setState(prev => ({ ...prev, currentUser: null }));
     setActiveView('landing');
   };
@@ -102,18 +105,31 @@ export default function App() {
     }));
   };
 
-  if (activeView === 'landing' && !state.currentUser) {
+  if (activeView === 'landing' && !isAuthenticated) {
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
         <MainLandingPage 
           onJoin={() => setActiveView('registration')}
-          onAdminPanel={() => setActiveView('internal_login')} 
+          onAdminPanel={() => setActiveView('login')} 
         />
       </LanguageContext.Provider>
     );
   }
 
-  if (activeView === 'registration' && !state.currentUser) {
+  if (activeView === 'login' && !isAuthenticated) {
+    return (
+      <LanguageContext.Provider value={{ language, setLanguage, t }}>
+        <LoginView 
+          onLoginSuccess={() => {
+            setIsAuthenticated(true);
+            setActiveView('authority_access');
+          }}
+        />
+      </LanguageContext.Provider>
+    );
+  }
+
+  if (activeView === 'registration' && !isAuthenticated) {
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
         <RegisterFlow 
@@ -124,12 +140,12 @@ export default function App() {
     );
   }
 
-  if (activeView === 'internal_login' && !state.currentUser) {
+  if (activeView === 'authority_access' && isAuthenticated && !state.currentUser) {
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
         <AdminLoginView 
           onLogin={handleLogin}
-          onBack={() => setActiveView('landing')}
+          onBack={handleLogout}
         />
       </LanguageContext.Provider>
     );
@@ -139,7 +155,7 @@ export default function App() {
     // Fallback if something fails
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
-        <LoginView onLogin={handleLogin} />
+        <LoginView onLoginSuccess={() => { setIsAuthenticated(true); setActiveView('authority_access'); }} />
       </LanguageContext.Provider>
     );
   }

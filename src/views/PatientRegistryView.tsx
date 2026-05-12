@@ -29,7 +29,7 @@ interface PatientRegistryViewProps {
   onComplete: (patient: Patient, outcome: Outcome, parentPatient: ParentPatient) => void;
   onBulkComplete: (patients: Patient[], outcomes: Outcome[], parentPatients: ParentPatient[]) => void;
   defaultMode?: ViewMode;
-  onNavigate?: (view: string) => void;
+  onNavigate?: (view: string, hash?: string) => void;
 }
 
 type ViewMode = 'list' | 'single' | 'bulk';
