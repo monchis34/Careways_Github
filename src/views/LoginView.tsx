@@ -4,7 +4,7 @@ import { ShieldCheck, Lock, Building, ArrowRight, Eye, EyeOff } from 'lucide-rea
 import { motion } from 'motion/react';
 
 interface LoginViewProps {
-  onLoginSuccess: () => void;
+  onLoginSuccess: (email: string) => void;
 }
 
 export default function LoginView({ onLoginSuccess }: LoginViewProps) {
@@ -16,7 +16,7 @@ export default function LoginView({ onLoginSuccess }: LoginViewProps) {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     if (email && password) {
-      onLoginSuccess();
+      onLoginSuccess(email);
     }
   };
   

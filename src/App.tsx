@@ -46,6 +46,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<string>('landing');
   const [activePatientHash, setActivePatientHash] = useState<string | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [authenticatedUser, setAuthenticatedUser] = useState<AppUser | null>(null);
   
   const [state, setState] = useState<AppState>(() => {
     const seed = generateSeedData();
@@ -59,10 +60,10 @@ export default function App() {
     setState(prev => ({
       ...prev,
       currentUser: { 
-        id: Math.random().toString(36).substr(2, 9),
+        id: authenticatedUser?.id || Math.random().toString(36).substr(2, 9),
         role, 
-        name: `Demo ${role}`,
-        institutionId: role === 'Administrator' ? 'inst-1' : 'inst-2' // Mock assignment
+        name: authenticatedUser ? `${authenticatedUser.firstName} ${authenticatedUser.lastName}` : `Demo ${role}`,
+        institutionId: authenticatedUser?.institutionId || (role === 'Administrator' ? 'inst-1' : 'inst-2')
       }
     }));
     setActiveView(role === 'Clinician' || role === 'Administrator' || role === 'ClinicalTrainer' || role === 'ClinicalUser' ? 'registry' : 'dashboard');
@@ -120,9 +121,24 @@ export default function App() {
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
         <LoginView 
-          onLoginSuccess={() => {
+          onLoginSuccess={(email: string) => {
             setIsAuthenticated(true);
-            setActiveView('authority_access');
+            const user = state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+            
+            if (user) {
+              setAuthenticatedUser(user);
+              if (user.role === 'ClinicalUser') {
+                // Bypass authority access
+                handleLogin(user.role);
+              } else {
+                setActiveView('authority_access');
+              }
+            } else {
+              // Default mock user if not found
+              const baseUser = state.users[0];
+              setAuthenticatedUser(baseUser);
+              setActiveView('authority_access');
+            }
           }}
         />
       </LanguageContext.Provider>
@@ -146,16 +162,26 @@ export default function App() {
         <AdminLoginView 
           onLogin={handleLogin}
           onBack={handleLogout}
+          baseRole={authenticatedUser?.role}
         />
       </LanguageContext.Provider>
     );
   }
 
-  if (!state.currentUser) {
+  if (!state.currentUser && !isAuthenticated) {
     // Fallback if something fails
     return (
       <LanguageContext.Provider value={{ language, setLanguage, t }}>
-        <LoginView onLoginSuccess={() => { setIsAuthenticated(true); setActiveView('authority_access'); }} />
+        <LoginView onLoginSuccess={(email) => { 
+          setIsAuthenticated(true);
+          const user = state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+          setAuthenticatedUser(user || state.users[0]);
+          if (user?.role === 'ClinicalUser') {
+            handleLogin(user.role);
+          } else {
+            setActiveView('authority_access'); 
+          }
+        }} />
       </LanguageContext.Provider>
     );
   }
@@ -216,7 +242,7 @@ export default function App() {
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>
       <div className="flex h-screen bg-[#f7f9fb] overflow-hidden font-sans">
-        <Sidebar role={state.currentUser.role} onLogout={handleLogout} activeView={activeView} onViewChange={setActiveView} />
+        <Sidebar role={state.currentUser.role} baseRole={authenticatedUser?.role} onRoleChange={(role) => handleLogin(role)} onLogout={handleLogout} activeView={activeView} onViewChange={setActiveView} />
         <div className="flex-1 flex flex-col min-w-0">
           <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} />
           <main className="flex-1 overflow-y-auto p-6 md:p-8">

@@ -19,41 +19,53 @@ import { useLanguage } from '../App';
 interface AdminLoginViewProps {
   onLogin: (role: UserRole) => void;
   onBack: () => void;
+  baseRole?: string;
 }
 
-export default function AdminLoginView({ onLogin, onBack }: AdminLoginViewProps) {
+export default function AdminLoginView({ onLogin, onBack, baseRole }: AdminLoginViewProps) {
   const { t } = useLanguage();
+
+  let allowedRoles: string[] = [];
+  if (baseRole === 'Analyst') {
+    allowedRoles = ['Analyst', 'Administrator', 'ClinicalTrainer', 'ClinicalUser'];
+  } else if (baseRole === 'Administrator') {
+    allowedRoles = ['Administrator', 'ClinicalTrainer', 'ClinicalUser'];
+  } else if (baseRole === 'ClinicalTrainer') {
+    allowedRoles = ['ClinicalTrainer', 'ClinicalUser'];
+  } else {
+    allowedRoles = ['ClinicalTrainer', 'ClinicalUser', 'Administrator', 'Analyst'];
+  }
 
   const adminRoles: { role: UserRole; display: string; icon: any; color: string; desc: string }[] = [
     { 
-      role: 'ClinicalTrainer', 
+      role: 'ClinicalTrainer' as UserRole, 
       display: t.roles.ClinicalTrainer,
       icon: ShieldCheck, 
       color: 'bg-blue-600',
       desc: t.adminLogin.trainerDesc
     },
     {
-      role: 'ClinicalUser',
+      role: 'ClinicalUser' as UserRole,
       display: t.roles.ClinicalUser,
       icon: Stethoscope,
       color: 'bg-indigo-600',
       desc: t.adminLogin.clinicalUserDesc
     },
     { 
-      role: 'Administrator', 
+      role: 'Administrator' as UserRole, 
       display: t.roles.Administrator,
       icon: Settings, 
       color: 'bg-purple-600',
       desc: t.adminLogin.adminDesc
     },
     { 
-      role: 'Analyst', 
+      role: 'Analyst' as UserRole, 
       display: t.roles.Analyst,
       icon: BarChart3, 
       color: 'bg-emerald-600',
       desc: t.adminLogin.analystDesc
     },
-  ];
+  ].filter(r => allowedRoles.includes(r.role));
 
   return (
     <div className="min-h-screen bg-[#f7f9fb] flex items-center justify-center p-6">

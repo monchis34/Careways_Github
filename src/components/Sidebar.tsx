@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { UserRole } from '../types';
 import { 
   LayoutDashboard, 
@@ -15,20 +15,46 @@ import {
   Users,
   LineChart,
   Search,
-  GraduationCap
+  GraduationCap,
+  ChevronUp,
+  ChevronDown,
+  ShieldCheck,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useLanguage } from '../App';
 
 interface SidebarProps {
   role: UserRole;
+  baseRole?: string;
   activeView: string;
   onViewChange: (view: string) => void;
+  onRoleChange?: (newRole: UserRole) => void;
   onLogout: () => void;
 }
 
-export default function Sidebar({ role, activeView, onViewChange, onLogout }: SidebarProps) {
+export default function Sidebar({ role, baseRole, activeView, onViewChange, onRoleChange, onLogout }: SidebarProps) {
   const { t } = useLanguage();
+  const [profileSelectorOpen, setProfileSelectorOpen] = useState(false);
+
+  // Determine allowed roles based on baseRole
+  let allowedRoles: { role: UserRole; label: string; icon: any }[] = [];
+  if (baseRole) {
+    const rolesConfig = [
+      { role: 'Analyst' as UserRole, label: t.roles?.Analyst || 'Analyst', icon: BarChart3 },
+      { role: 'Administrator' as UserRole, label: t.roles?.Administrator || 'Administrator', icon: Settings },
+      { role: 'ClinicalTrainer' as UserRole, label: t.roles?.ClinicalTrainer || 'Clinical Trainer', icon: ShieldCheck },
+      { role: 'ClinicalUser' as UserRole, label: t.roles?.ClinicalUser || 'Clinical User', icon: Stethoscope },
+    ];
+    
+    if (baseRole === 'Analyst') {
+      allowedRoles = rolesConfig;
+    } else if (baseRole === 'Administrator') {
+      allowedRoles = rolesConfig.filter(r => ['Administrator', 'ClinicalTrainer', 'ClinicalUser'].includes(r.role));
+    } else if (baseRole === 'ClinicalTrainer') {
+      allowedRoles = rolesConfig.filter(r => ['ClinicalTrainer', 'ClinicalUser'].includes(r.role));
+    }
+  }
 
   const getNavItems = () => {
     const items = [];
@@ -104,6 +130,44 @@ export default function Sidebar({ role, activeView, onViewChange, onLogout }: Si
       </nav>
 
       <div className="p-4 mt-auto">
+        {allowedRoles.length > 0 && onRoleChange && (
+          <div className="mb-4 relative rounded-xl border border-white/10 bg-white/5 transition-all">
+            <button 
+              onClick={() => setProfileSelectorOpen(!profileSelectorOpen)}
+              className="w-full flex items-center justify-between p-3"
+            >
+              <div className="flex flex-col text-left">
+                <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Active Profile</span>
+                <span className="text-sm font-medium text-white truncate w-32">{allowedRoles.find(r => r.role === role)?.label || role}</span>
+              </div>
+              {profileSelectorOpen ? <ChevronDown className="w-4 h-4 text-white/60" /> : <ChevronUp className="w-4 h-4 text-white/60" />}
+            </button>
+            
+            {profileSelectorOpen && (
+              <div className="absolute bottom-full left-0 w-full mb-2 bg-[#0a1945] rounded-xl border border-white/10 overflow-hidden shadow-xl shadow-black/30 z-50 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="p-2 space-y-1">
+                  {allowedRoles.map((r) => (
+                    <button
+                      key={r.role}
+                      onClick={() => {
+                        onRoleChange(r.role);
+                        setProfileSelectorOpen(false);
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors text-left",
+                        role === r.role ? "bg-cyan-900/40 text-cyan-400 font-bold" : "text-white/70 hover:bg-white/10 hover:text-white"
+                      )}
+                    >
+                      <r.icon className="w-4 h-4" />
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button 
           onClick={onLogout}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-white/60 hover:bg-red-500/10 hover:text-red-400 transition-colors"

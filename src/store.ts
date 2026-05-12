@@ -60,6 +60,26 @@ export function generateSeedData() {
       role: 'ClinicalTrainer', 
       institutionId: 'inst-2', 
       status: 'Active' 
+    },
+    { 
+      id: 'clinician-1', 
+      firstName: 'Clinical', 
+      lastName: 'User', 
+      email: 'clinician@hospitalcentral.org', 
+      phone: '+573112223333', 
+      role: 'ClinicalUser', 
+      institutionId: 'inst-1', 
+      status: 'Active' 
+    },
+    { 
+      id: 'analyst-1', 
+      firstName: 'Data', 
+      lastName: 'Analyst', 
+      email: 'analyst@hospitalcentral.org', 
+      phone: '+573114445555', 
+      role: 'Analyst', 
+      institutionId: 'inst-1', 
+      status: 'Active' 
     }
   ];
 
