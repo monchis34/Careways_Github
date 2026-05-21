@@ -251,8 +251,26 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
     missingFields.push({ label: isEn ? 'Risk Subtype Missing' : 'Subtipo de Riesgo Faltante', sectionId: 'risk' });
   }
 
-  if (form.outcome.tracheostomy === 1 && !form.outcome.tracheostomyDate) {
-    missingFields.push({ label: isEn ? 'Tracheostomy Date Missing' : 'Fecha Traqueostomía Faltante', sectionId: 'events' });
+  if (form.outcome.tracheostomy === 1) {
+    if (!form.outcome.tracheostomyDate) {
+      missingFields.push({ label: isEn ? 'Tracheostomy Date Missing' : 'Fecha Traqueostomía Faltante', sectionId: 'events' });
+    } else if (form.outcome.intubationDateTime && form.outcome.tracheostomyDate) {
+       if (parseISO(form.outcome.tracheostomyDate) < parseISO(form.outcome.intubationDateTime)) {
+         missingFields.push({ label: isEn ? 'Procedure date cannot be earlier than intubation' : 'La fecha del procedimiento no puede ser anterior a la intubación', sectionId: 'events' });
+       }
+    }
+  }
+
+  if (form.outcome.electiveExtubation === 1) {
+    if (form.outcome.reintubationNeededPostElective === 0) {
+      missingFields.push({ label: isEn ? 'Reintubation after elective extubation missing' : 'Reintubación post extubación electiva faltante', sectionId: 'events' });
+    }
+    if (form.outcome.failedExtubationAttempts === '' as unknown as number || form.outcome.failedExtubationAttempts < 0 || form.outcome.failedExtubationAttempts > 10) {
+      missingFields.push({ label: isEn ? 'Invalid/Missing failed extubation attempts (0-10)' : 'Intentos fallidos inválidos o faltantes (0-10)', sectionId: 'events' });
+    }
+    if (!form.outcome.successfulExtubationDate) {
+      missingFields.push({ label: isEn ? 'Successful extubation date missing' : 'Fecha de extubación exitosa faltante', sectionId: 'events' });
+    }
   }
 
   if (!form.outcome.status) missingFields.push({ label: isEn ? 'Vital Status Missing' : 'Estado Vital Faltante', sectionId: 'outcomes' });
@@ -419,7 +437,7 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                 <option value="Female">{isEn ? 'Female' : 'Femenino'}</option>
               </select>
             </FormField>
-            <FormField label={isEn ? "Weight (kg)" : "Peso (kg)"}><input type="number" step="0.1" value={form.outcome.weight||''} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, weight: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label={isEn ? "Weight (kg)" : "Peso (kg)"}><input type="number" min="0.5" step="0.1" value={form.outcome.weight||''} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, weight: Number(e.target.value)}}))} className="input" /></FormField>
             <FormField label={isEn ? "Primary Diagnosis" : "Diagnóstico Primario"}>
               <select value={form.outcome.diagnosis} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, diagnosis: e.target.value}}))} className="input">
                 <option value="">-- {isEn ? 'Select Diagnosis' : 'Seleccionar Diagnóstico'} --</option>
@@ -569,6 +587,48 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                     </div>
                   </div>
 
+                  {/* Event 3 */}
+                  <div className="p-5 bg-emerald-50 border border-emerald-100 rounded-2xl">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div>
+                        <span className="font-black text-emerald-900 block">D3. {isEn?'Elective Extubation':'Extubación Electiva'}</span>
+                      </div>
+                      <div className="w-48">
+                        <BooleanToggle 
+                          value={form.outcome.electiveExtubation} 
+                          onChange={(v:any) => setForm(f=>({
+                             ...f, 
+                             outcome: {
+                               ...f.outcome, 
+                               electiveExtubation: v,
+                               ...(v === 2 ? {
+                                  reintubationNeededPostElective: 0,
+                                  failedExtubationAttempts: '' as unknown as number,
+                                  successfulExtubationDate: ''
+                               } : {
+                                  ...(f.outcome.failedExtubationAttempts === undefined ? {failedExtubationAttempts: '' as unknown as number} : {})
+                               })
+                             }
+                          }))} 
+                          isEn={isEn} 
+                        />
+                      </div>
+                    </div>
+                    {form.outcome.electiveExtubation === 1 && (
+                      <div className="mt-6 pt-6 border-t border-emerald-200/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-in slide-in-from-top-2 fade-in">
+                        <FormField label={isEn ? "Reintubation Needed?" : "¿Requirió Reintubación?"}>
+                          <BooleanToggle value={form.outcome.reintubationNeededPostElective} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, reintubationNeededPostElective: v}}))} isEn={isEn} />
+                        </FormField>
+                        <FormField label={isEn ? "Failed Attempts" : "Intentos Fallidos"}>
+                          <input type="number" min="0" max="10" value={form.outcome.failedExtubationAttempts} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, failedExtubationAttempts: Number(e.target.value)}}))} className="input bg-white" />
+                        </FormField>
+                        <FormField label={isEn ? "Successful Extubation Date" : "Fecha Extubación Exitosa"}>
+                          <input type="date" value={form.outcome.successfulExtubationDate} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, successfulExtubationDate: e.target.value}}))} className="input bg-white" />
+                        </FormField>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Procedures */}
                   <div className="p-5 bg-purple-50 border border-purple-100 rounded-2xl">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -611,9 +671,9 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
             <FormField label={isEn ? "Recovery from Surgery" : "Recuperación Post-Quirúrgica"}>
                <BooleanToggle value={form.outcome.surgeryRecovery} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, surgeryRecovery: v}}))} isEn={isEn} />
             </FormField>
-            <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"}><input type="number" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="FiO2 (21-100)"><input type="number" value={form.outcome.fiO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, fiO2: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="PaO2 (mmHg)"><input type="number" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"}><input type="number" min="0" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label="FiO2 (21-100)"><input type="number" min="21" max="100" value={form.outcome.fiO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, fiO2: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label="PaO2 (mmHg)"><input type="number" min="0" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
             <FormField label={isEn ? "Base Excess" : "Exceso de Base"}><input type="number" step="0.1" value={form.outcome.baseExcess || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, baseExcess: Number(e.target.value)}}))} className="input" /></FormField>
           </Section>
           
@@ -668,7 +728,15 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                   <h3 className="mt-6 font-black text-[#204071] text-lg">{isEn ? 'Mortality Probability' : 'Probabilidad de Mortalidad'}</h3>
                   <p className="text-sm text-center text-blue-800/60 mt-2">{isEn ? 'Calculated automatically using the official Pediatric Index of Mortality 3 formula' : 'Calculado automáticamente usando la fórmula oficial del Índice Pediátrico de Mortalidad 3'}</p>
                </div>
-               <div className="flex flex-col justify-center p-8 bg-white border border-gray-200 rounded-3xl shadow-sm space-y-6">
+               <div className="flex flex-col justify-center p-8 bg-white border border-gray-200 rounded-3xl shadow-sm space-y-6 relative">
+                 {!calculatedPIM3 && (
+                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 border border-amber-200 rounded-3xl text-center">
+                     <AlertTriangle className="w-8 h-8 text-amber-500 mb-3" />
+                     <p className="text-sm font-bold text-amber-800">
+                       {isEn ? 'PIM3 cannot be calculated until required physiological values are entered' : 'PIM3 no puede ser calculado hasta que se ingresen los valores fisiológicos requeridos'}
+                     </p>
+                   </div>
+                 )}
                  <div>
                     <h4 className="text-sm font-bold uppercase text-gray-500 tracking-wider mb-2">{isEn ? 'Raw PIM3 Logit Score' : 'Puntaje Logit PIM3 Bruto'}</h4>
                     <span className="text-4xl font-black text-gray-900">{calculatedPIM3 ? calculatedPIM3.score : '---'}</span>
@@ -709,7 +777,7 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                  {form.outcome.status === 'Deceased' && (
                    <>
                      <div className="col-span-full sm:col-span-1">
-                       <FormField label={isEn ? "Did death occur ≤24h of admission?" : "¿Muerte ocurrió ≤24h del ingreso?"}>
+                       <FormField label={isEn ? "Did death occur within 24 hours of ICU admission?" : "¿Ocurrió la muerte dentro de las 24 horas del ingreso a la UCI?"}>
                          <BooleanToggle value={form.outcome.deceasedLessThan24h} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, deceasedLessThan24h: v}}))} isEn={isEn} />
                        </FormField>
                      </div>
