@@ -85,11 +85,13 @@ export interface Outcome {
   failedExtubationAttempts?: number;
   successfulExtubationDate?: string;
 
-  tracheostomy?: boolean;
+  tracheostomy?: boolean | 0 | 1 | 2;
+  tracheostomyDate?: string;
 
   // 3. DESENLACE - MORTALIDAD
-  status: 'Living' | 'Deceased'; // MORTALIDAD S/N
-  mortalityRespiratory?: boolean; // MORT. CAUSAS RESPIRATORIA S/N
+  status: 'Living' | 'Deceased' | ''; // MORTALIDAD S/N
+  deceasedLessThan24h?: boolean | 0 | 1 | 2;
+  mortalityRespiratory?: boolean | 0 | 1 | 2; // MORT. CAUSAS RESPIRATORIA S/N
   ventilationDays: number;
   
   createdAt: string;
