@@ -51,25 +51,44 @@ interface DashboardViewProps {
 export default function DashboardView({ state }: DashboardViewProps) {
   const { t } = useLanguage();
   const [filterType, setFilterType] = useState<PatientType | 'All'>('All');
-  const [filterHospital, setFilterHospital] = useState<string>('All');
-  const [filterCity, setFilterCity] = useState<string>('All');
-  const [filterCountry, setFilterCountry] = useState<string>('All');
+  const [filterStatus, setFilterStatus] = useState<'All' | 'Living' | 'Deceased'>('All');
+  const [filterEdu, setFilterEdu] = useState<'All' | 'Yes' | 'No'>('All');
+  const [filterDate, setFilterDate] = useState<'All' | '30' | '90'>('All');
   
   const filteredData = useMemo(() => {
     let patients = state.patients;
     if (filterType !== 'All') patients = patients.filter(p => p.type === filterType);
-    if (filterHospital !== 'All') patients = patients.filter(p => p.hospital === filterHospital);
-    if (filterCity !== 'All') patients = patients.filter(p => p.city === filterCity);
-    if (filterCountry !== 'All') patients = patients.filter(p => p.country === filterCountry);
+    if (filterDate !== 'All') {
+       const days = parseInt(filterDate);
+       const cutoff = new Date();
+       cutoff.setDate(cutoff.getDate() - days);
+       patients = patients.filter(p => new Date(p.admissionDate) >= cutoff);
+    }
 
-    const patientIds = patients.map(p => p.patientHash);
+    const patientIdsObj = new Set(patients.map(p => p.patientHash));
+    let outcomes = state.outcomes.filter(o => patientIdsObj.has(o.patientHash));
+    let parents = state.parentPatients.filter(p => patientIdsObj.has(p.patientHash));
+
+    if (filterStatus !== 'All') outcomes = outcomes.filter(o => o.status === filterStatus);
+    
+    if (filterEdu !== 'All') {
+       const hasEduStr = filterEdu === 'Yes';
+       parents = parents.filter(p => p.educationActivated === hasEduStr);
+       const eduPatHashes = new Set(parents.map(p => p.patientHash));
+       patients = patients.filter(p => eduPatHashes.has(p.patientHash));
+       outcomes = outcomes.filter(o => eduPatHashes.has(o.patientHash));
+    } else {
+       const outPatHashes = new Set(outcomes.map(o => o.patientHash));
+       patients = patients.filter(p => outPatHashes.has(p.patientHash));
+    }
+
     return {
       ...state,
       patients,
-      outcomes: state.outcomes.filter(o => patientIds.includes(o.patientHash)),
-      parentPatients: state.parentPatients.filter(p => patientIds.includes(p.patientHash))
+      outcomes,
+      parentPatients: parents
     };
-  }, [state, filterType, filterHospital, filterCity, filterCountry]);
+  }, [state, filterType, filterStatus, filterEdu]);
 
   // Unique values for filters
   const hospitals = useMemo(() => Array.from(new Set(state.patients.map(p => p.hospital))), [state.patients]);
@@ -173,34 +192,37 @@ export default function DashboardView({ state }: DashboardViewProps) {
 
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <select 
-              value={filterHospital}
-              onChange={(e) => setFilterHospital(e.target.value)}
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value as any)}
               className="bg-transparent text-sm font-semibold focus:outline-none"
             >
-              <option value="All">{t.analytics.hospital}: All</option>
-              {hospitals.map(h => <option key={h} value={h}>{h}</option>)}
+              <option value="All">Date: All Time</option>
+              <option value="30">Date: Last 30 Days</option>
+              <option value="90">Date: Last 90 Days</option>
             </select>
           </div>
 
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <select 
-              value={filterCity}
-              onChange={(e) => setFilterCity(e.target.value)}
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
               className="bg-transparent text-sm font-semibold focus:outline-none"
             >
-              <option value="All">{t.analytics.city}: All</option>
-              {cities.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="All">Status: All</option>
+              <option value="Living">Discharged Alive</option>
+              <option value="Deceased">Deceased</option>
             </select>
           </div>
 
           <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm">
             <select 
-              value={filterCountry}
-              onChange={(e) => setFilterCountry(e.target.value)}
+              value={filterEdu}
+              onChange={(e) => setFilterEdu(e.target.value as any)}
               className="bg-transparent text-sm font-semibold focus:outline-none"
             >
-              <option value="All">{t.analytics.country}: All</option>
-              {countries.map(c => <option key={c} value={c}>{c}</option>)}
+              <option value="All">Education: All</option>
+              <option value="Yes">Education: Active</option>
+              <option value="No">Education: None</option>
             </select>
           </div>
 

@@ -48,12 +48,17 @@ export interface Outcome {
   
   // Risk Taxonomy / PIM3
   weightedDiagnosis: string;
-  pim3LowRiskDiagnosis: boolean;
-  pim3HighRiskDiagnosis: boolean;
-  pim3VeryHighRiskDiagnosis: boolean;
+  pim3LowRiskDiagnosis: boolean | 0 | 1 | 2;
+  pim3HighRiskDiagnosis: boolean | 0 | 1 | 2;
+  pim3VeryHighRiskDiagnosis: boolean | 0 | 1 | 2;
   pim3Score: number;
   mortalityProbability: number;
   manualMortalityProbability?: number;
+
+  riskCategory?: '' | 'Low Risk' | 'High Risk' | 'Very High Risk' | 'None';
+  riskSubtype?: string;
+  primaryIndication?: string;
+  primaryIndicationOther?: string;
 
   diagnosis: string; // Primary category
   
