@@ -4,7 +4,7 @@ import { generatePatientHash } from '../store';
 import { useLanguage } from '../App';
 import { 
   User, Wind, AlertTriangle, Activity, TrendingDown,
-  FileText, ShieldCheck, CheckCircle2, AlertCircle, Loader2, Info
+  FileText, ShieldCheck, CheckCircle2, AlertCircle, Loader2, Info, History
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, parseISO, isValid } from 'date-fns';
@@ -200,6 +200,13 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
     return { score: score.toFixed(2), prob: (prob * 100).toFixed(2) };
   }, [form.outcome]);
 
+  useEffect(() => {
+    if (form.patient.mrn && form.patient.mrn.length >= 3) {
+      const payload = { form, activeSection };
+      localStorage.setItem(`autosave_draft_${form.patient.mrn}`, JSON.stringify(payload));
+    }
+  }, [form, activeSection]);
+
   // Dynamic Validation Panel
   const missingFields: { label: string; sectionId: string }[] = [];
   if (!form.patient.country) missingFields.push({ label: isEn ? 'Country missing' : 'País faltante', sectionId: 'identification' });
@@ -373,13 +380,38 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
           <Info className="w-5 h-5 flex-shrink-0" />
           <span className="text-[11px] leading-tight flex items-center">{isEn ? 'Cierre de caso permitido únicamente al dar de alta o al reportar fallecimiento.' : 'Cierre permitido SOLO si el paciente es dado de alta o fallece.'}</span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={onExit} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold">
-            {isEn ? 'Cancel' : 'Cancelar'}
-          </button>
-          <button onClick={handleFinish} disabled={isSending || !canSave} className="disabled:opacity-50 px-6 py-2 bg-[#85F0D4] hover:bg-[#68dcb8] text-[#204071] rounded-xl text-sm font-black flex items-center gap-2 transition-colors">
-            {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} {isEn ? 'Save & Close Case' : 'Guardar y Cerrar'}
-          </button>
+        <div className="flex items-center gap-4">
+          <div className="hidden md:flex items-center mr-2">
+            <div className="w-8 h-8 rounded-full bg-blue-700 text-xs font-bold flex items-center justify-center text-blue-100 border-2 border-blue-900 relative group cursor-help shadow-sm">
+              DR
+              <div className="absolute hidden group-hover:block top-full mt-2 right-0 whitespace-nowrap bg-gray-900 text-white text-xs p-2 rounded-lg z-50 shadow-xl border border-gray-700 text-left">
+                <p className="font-bold">Dr. Juan Pérez</p>
+                <p className="text-gray-300">Physician</p>
+              </div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-emerald-600 text-xs font-bold flex items-center justify-center text-emerald-100 border-2 border-blue-900 relative group cursor-help -ml-3 shadow-sm">
+              RN
+              <div className="absolute hidden group-hover:block top-full mt-2 right-0 whitespace-nowrap bg-gray-900 text-white text-xs p-2 rounded-lg z-50 shadow-xl border border-gray-700 text-left">
+                <p className="font-bold">Ana Gómez</p>
+                <p className="text-gray-300">Nurse</p>
+              </div>
+            </div>
+            <div className="w-8 h-8 rounded-full bg-indigo-600 text-xs font-bold flex items-center justify-center text-indigo-100 border-2 border-blue-900 relative group cursor-help -ml-3 shadow-sm">
+              RT
+              <div className="absolute hidden group-hover:block top-full mt-2 right-0 whitespace-nowrap bg-gray-900 text-white text-xs p-2 rounded-lg z-50 shadow-xl border border-gray-700 text-left">
+                <p className="font-bold">Carlos Ruiz</p>
+                <p className="text-gray-300">Respiratory Therapist</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onExit} className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-sm font-bold">
+              {isEn ? 'Cancel' : 'Cancelar'}
+            </button>
+            <button onClick={handleFinish} disabled={isSending || !canSave} className="disabled:opacity-50 px-6 py-2 bg-[#85F0D4] hover:bg-[#68dcb8] text-[#204071] rounded-xl text-sm font-black flex items-center gap-2 transition-colors">
+              {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} {isEn ? 'Save & Close Case' : 'Guardar y Cerrar'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -399,6 +431,28 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                 </button>
               ))}
             </nav>
+          </div>
+
+          <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col max-h-[300px]">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3 flex items-center gap-2">
+              <History className="w-4 h-4" /> {isEn ? 'Clinical Activity Log' : 'Bitácora Clínica'}
+            </h3>
+            <div className="overflow-y-auto pr-2 space-y-4 flex-1 custom-scrollbar">
+               {[
+                 { name: "Dr. Juan Pérez", role: "Physician", action: isEn ? "Updated PIM3 variables" : "Actualizó variables PIM3", time: "10 min ago" },
+                 { name: "Ana Gómez", role: "Nurse", action: isEn ? "Updated airway data" : "Actualizó datos de vía aérea", time: "1 hr ago" },
+                 { name: "Carlos Ruiz", role: "Respiratory Therapist", action: isEn ? "Initial admission registry" : "Registro de admisión inicial", time: "2 hrs ago" }
+               ].map((log, i) => (
+                 <div key={i} className="flex gap-3 text-sm">
+                    <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 flex-shrink-0"></div>
+                    <div>
+                       <p className="font-bold text-gray-900 leading-tight">{log.name} <span className="font-normal text-gray-500 text-xs">({log.role})</span></p>
+                       <p className="text-gray-600 text-[11px] mt-0.5">{log.action}</p>
+                       <p className="text-gray-400 text-[10px] mt-0.5">{log.time}</p>
+                    </div>
+                 </div>
+               ))}
+            </div>
           </div>
         </div>
 
@@ -427,7 +481,27 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
               </FormField>
             </div>
 
-            <FormField label={isEn ? "Record Number" : "Número de Historia"}><input value={form.patient.mrn} onChange={e => setForm(f=>({...f, patient: {...f.patient, mrn: e.target.value}}))} className="input" /></FormField>
+            <FormField label={isEn ? "Record Number" : "Número de Historia"}>
+              <input 
+                 value={form.patient.mrn} 
+                 onChange={e => {
+                    const val = e.target.value;
+                    const saved = localStorage.getItem(`autosave_draft_${val}`);
+                    if (saved) {
+                       try {
+                         const parsed = JSON.parse(saved);
+                         if (parsed.form) setForm({...parsed.form, patient: {...parsed.form.patient, mrn: val}});
+                         if (parsed.activeSection) setActiveSection(parsed.activeSection);
+                       } catch (e) {
+                         setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
+                       }
+                    } else {
+                       setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
+                    }
+                 }} 
+                 className="input" 
+              />
+            </FormField>
             <FormField label={isEn ? "Full Name" : "Nombre Completo"}><input value={form.patient.name} onChange={e => setForm(f=>({...f, patient: {...f.patient, name: e.target.value}}))} className="input" /></FormField>
             <FormField label={isEn ? "Date of Birth" : "Fecha de Nacimiento"}><input type="date" value={form.patient.birthDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, birthDate: e.target.value}}))} className="input" /></FormField>
             <FormField label={isEn ? "Gender" : "Género"}>
