@@ -227,7 +227,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     let score = -4.8829;
     if (form.outcome.pupils === 0) score += 1.6677; // Fixed pupils
     if (form.outcome.electiveAdmission === 1) score -= 1.3980;
-    if (form.outcome.mechanicalVentilation === 1) score += 0.5192;
+    if (form.outcome.mechanicalVentilation === 1 || form.outcome.intubated === 1) score += 0.5192;
     if (form.outcome.surgeryRecovery === 1) score -= 0.8876;
     
     if (form.outcome.pim3LowRiskDiagnosis === 1 || form.outcome.riskCategory === 'Low Risk') score -= 1.0506;
@@ -235,20 +235,20 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     if (form.outcome.pim3VeryHighRiskDiagnosis === 1 || form.outcome.riskCategory === 'Very High Risk') score += 2.5979;
 
     const sbp = Number(form.outcome.systolicBP);
-    if (sbp > 0) {
-      score += (Math.abs(sbp - 120) * 0.0139);
+    if (!isNaN(sbp) && sbp >= 0) {
+      score += (Math.abs(sbp - 120) * 0.01395);
     }
     const be = Number(form.outcome.baseExcess);
-    if (be !== 0) {
-      score += (Math.abs(be) * 0.0531);
+    if (!isNaN(be)) {
+      score += (Math.abs(be) * 0.104);
     }
 
     const pao2 = Number(form.outcome.paO2) || 1;
     const fio2 = Number(form.outcome.fiO2) || 21;
-    const isVentilated = form.outcome.mechanicalVentilation === 1;
+    const isVentilated = form.outcome.mechanicalVentilation === 1 || form.outcome.intubated === 1;
     if (isVentilated) {
-      const pao2fio2 = (pao2 / (fio2 / 100));
-      score += Math.abs((pao2fio2) - 250) * 0.001; // simplification of non-linear component for demo
+      const pao2fio2 = (100 * pao2 / fio2);
+      score += Math.abs((pao2fio2) - 250) * 0.0071; // Non-linear component representation
     }
 
     const prob = Math.exp(score) / (1 + Math.exp(score));
@@ -278,6 +278,12 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
   if (!form.patient.mrn) missingFields.push({ label: isEn ? 'Record Number missing' : 'Número de historia faltante', sectionId: 'identification' });
   if (!form.patient.name) missingFields.push({ label: isEn ? 'Name missing' : 'Nombre faltante', sectionId: 'identification' });
   if (!form.patient.birthDate) missingFields.push({ label: isEn ? 'DOB missing' : 'Fecha de nacimiento', sectionId: 'identification' });
+  
+  if (form.patient.admissionDate && form.patient.dischargeDate) {
+    if (parseISO(form.patient.dischargeDate) < parseISO(form.patient.admissionDate)) {
+      missingFields.push({ label: isEn ? 'Discharge date cannot be before admission date' : 'La fecha de alta no puede ser anterior a la admisión', sectionId: 'identification' });
+    }
+  }
   if (form.outcome.weight < 0.5 || form.outcome.weight > 150) missingFields.push({ label: isEn ? 'Invalid Weight' : 'Peso inválido', sectionId: 'identification' });
   if (!form.outcome.diagnosis) missingFields.push({ label: isEn ? 'Diagnosis missing' : 'Diagnóstico faltante', sectionId: 'identification' });
   
@@ -316,18 +322,49 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     missingFields.push({ label: isEn ? 'Clinical inconsistency detected with PIM3 model: Mech Vent given but No Intubation' : 'Inconsistencia clínica detectada con PIM3: Ventilación Mecánica sin Intubación', sectionId: 'pim3' });
   }
 
+  // 6. Advanced Clinical Validation Engine
+  if (form.outcome.electiveExtubation === 1 && form.outcome.intubated !== 1) {
+    missingFields.push({ label: isEn ? 'Cannot have extubation without intubation' : 'No puede haber extubación sin intubación', sectionId: 'events' });
+  }
+  if (form.outcome.accidentalExtubation === 1 && form.outcome.intubated !== 1) {
+    missingFields.push({ label: isEn ? 'Cannot have accidental extubation without intubation' : 'No puede haber extubación accidental sin intubación', sectionId: 'events' });
+  }
+  if (form.outcome.tracheostomy === 1 && form.outcome.mechanicalVentilation !== 1) {
+    warnings.push({ label: isEn ? 'Tracheostomy without mechanical ventilation is unusual' : 'Traqueostomía sin ventilación mecánica es inusual', sectionId: 'events' });
+  }
+  if (age.rawYears < 1 && form.outcome.systolicBP && Number(form.outcome.systolicBP) > 120) {
+    warnings.push({ label: isEn ? 'SBP > 120 is very high for infants <1y' : 'PAS > 120 es muy alta para lactantes <1a', sectionId: 'pim3' });
+  } else if (age.rawYears > 15 && form.outcome.systolicBP && Number(form.outcome.systolicBP) < 80) {
+    warnings.push({ label: isEn ? 'SBP < 80 is very low for >15y' : 'PAS < 80 es muy baja para >15a', sectionId: 'pim3' });
+  }
+
   if (!form.outcome.riskCategory) missingFields.push({ label: isEn ? 'Risk Category Missing' : 'Categoría de Riesgo Faltante', sectionId: 'risk' });
   if (['Low Risk', 'High Risk', 'Very High Risk'].includes(form.outcome.riskCategory || '') && !form.outcome.riskSubtype) {
     missingFields.push({ label: isEn ? 'Risk Subtype Missing' : 'Subtipo de Riesgo Faltante', sectionId: 'risk' });
   }
 
+  if (form.outcome.accidentalExtubation === 1) {
+    if (form.outcome.accidentalExtubationCount < 1) missingFields.push({ label: isEn ? 'Invalid Accidental Extubation Count (min 1)' : 'Eventos de extubación accidental inválidos (mín 1)', sectionId: 'events' });
+    if (!form.outcome.newTubeSizeAccidental || form.outcome.newTubeSizeAccidental < 2 || form.outcome.newTubeSizeAccidental > 10) missingFields.push({ label: isEn ? 'Invalid/Missing accidental new tube size (2.0-10.0)' : 'Tamaño de nuevo tubo accidental inválido o faltante (2.0-10.0)', sectionId: 'events' });
+    if (form.outcome.newTubeTypeAccidentalCuffed === 0) missingFields.push({ label: isEn ? 'Accidental new tube type missing' : 'Tipo de nuevo tubo accidental faltante', sectionId: 'events' });
+    if (form.outcome.requiedCprPostAccidental === 0) missingFields.push({ label: isEn ? 'CPR Required answer missing' : 'Respuesta sobre RCP requerida faltante', sectionId: 'events' });
+  }
+
   if (form.outcome.tracheostomy === 1) {
     if (!form.outcome.tracheostomyDate) {
       missingFields.push({ label: isEn ? 'Tracheostomy Date Missing' : 'Fecha Traqueostomía Faltante', sectionId: 'events' });
-    } else if (form.outcome.intubationDateTime && form.outcome.tracheostomyDate) {
-       if (parseISO(form.outcome.tracheostomyDate) < parseISO(form.outcome.intubationDateTime)) {
-         missingFields.push({ label: isEn ? 'Procedure date cannot be earlier than intubation' : 'La fecha del procedimiento no puede ser anterior a la intubación', sectionId: 'events' });
-       }
+    } else {
+      const trachDtObj = parseISO(form.outcome.tracheostomyDate);
+      if (form.outcome.intubationDateTime) {
+         if (trachDtObj < parseISO(form.outcome.intubationDateTime)) {
+           missingFields.push({ label: isEn ? 'Procedure date cannot be earlier than intubation' : 'La fecha del procedimiento no puede ser anterior a la intubación', sectionId: 'events' });
+         }
+      }
+      if (form.patient.dischargeDate) {
+         if (trachDtObj > parseISO(form.patient.dischargeDate)) {
+           missingFields.push({ label: isEn ? 'Procedure date cannot be after discharge' : 'La fecha del procedimiento no puede ser posterior al alta', sectionId: 'events' });
+         }
+      }
     }
   }
 
@@ -349,6 +386,10 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     }
     if (!form.outcome.successfulExtubationDate) {
       missingFields.push({ label: isEn ? 'Successful extubation date missing' : 'Fecha de extubación exitosa faltante', sectionId: 'events' });
+    } else if (form.outcome.intubationDateTime) {
+      if (parseISO(form.outcome.successfulExtubationDate) < parseISO(form.outcome.intubationDateTime)) {
+         missingFields.push({ label: isEn ? 'Extubation date cannot be earlier than intubation' : 'La fecha de extubación no puede ser anterior a la intubación', sectionId: 'events' });
+      }
     }
   }
 
@@ -396,7 +437,18 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
   }, []);
 
   const handleFinish = async () => {
-    if (!canSave) return;
+    if (!canSave) {
+       // Scroll to first invalid field section
+       const firstInvalid = missingFields[0]?.sectionId;
+       if (firstInvalid) {
+         const el = document.getElementById(`sect-${firstInvalid}`);
+         if (el && formRef.current) {
+           formRef.current.scrollTo({ top: el.offsetTop - 50, behavior: 'smooth' });
+           setActiveSection(firstInvalid);
+         }
+       }
+       return;
+    }
     setIsSending(true);
     await new Promise(r => setTimeout(r, 800));
     const hash = generatePatientHash(form.patient.mrn, form.patient.admissionDate);
@@ -411,14 +463,36 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
       type: t,
       id: hash, patientHash: hash, institutionId: state?.currentUser?.institutionId || 'inst-1',
     };
-    const out: Outcome = {
+    
+    // Derived analytics
+    const excludeMortalityBenchmark = form.outcome.status === 'Deceased' && form.outcome.deceasedLessThan24h === 1;
+    let tracheostomyUnder30Days = false;
+    if (form.outcome.tracheostomy === 1 && form.outcome.tracheostomyDate && form.outcome.intubationDateTime) {
+      tracheostomyUnder30Days = differenceInDays(parseISO(form.outcome.tracheostomyDate), parseISO(form.outcome.intubationDateTime)) < 30;
+    }
+    const ettAgeMismatch = !ettAdequate;
+    const ventilationQualityFlags = {
+       accidentalExtubations: form.outcome.accidentalExtubation === 1 ? form.outcome.accidentalExtubationCount : 0,
+       failedExtubations: form.outcome.electiveExtubation === 1 ? form.outcome.failedExtubationAttempts : 0,
+       prolongedVentilation: form.outcome.intubationDateTime && form.patient.dischargeDate ? (differenceInDays(parseISO(form.patient.dischargeDate), parseISO(form.outcome.intubationDateTime)) > 7) : false
+    };
+
+    const out: Outcome & any = {
       ...form.outcome,
       status: form.outcome.status as 'Living' | 'Deceased',
       patientHash: hash, createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: state?.currentUser?.name || "Clinician",
       age: age.rawYears, ageYears: Math.floor(age.rawYears),
       ettExpectedSize: expectedSize, ettAdequate,
       pim3Score: calculatedPIM3 ? Number(calculatedPIM3.score) : 0, 
-      mortalityProbability: calculatedPIM3 ? Number(calculatedPIM3.prob) : 0
+      mortalityProbability: calculatedPIM3 ? Number(calculatedPIM3.prob) : 0,
+      
+      // Analytics Flags
+      analytics_excludeMortalityBenchmark: excludeMortalityBenchmark,
+      analytics_tracheostomyUnder30Days: tracheostomyUnder30Days,
+      analytics_ettAgeMismatch: ettAgeMismatch,
+      analytics_ventilationQualityFlags: ventilationQualityFlags
     };
     const par: ParentPatient = {
       id: Math.random().toString(36).substr(2, 9), patientHash: hash,
@@ -554,6 +628,18 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                    <option value="">-- {isEn ? 'Select Hospital' : 'Seleccionar Hospital'} --</option>
                    {currentHospitals.map(h => <option key={h}>{h}</option>)}
                 </select>
+              </FormField>
+            </div>
+
+            <div className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <FormField label={isEn ? "Hospital Patient ID" : "ID Paciente Hospital"}>
+                <input value={form.patient.identifier || ''} onChange={e => setForm(f=>({...f, patient: {...f.patient, identifier: e.target.value}}))} className="input" />
+              </FormField>
+              <FormField label={isEn ? "Admission Date" : "Fecha de Admisión"}>
+                <input type="date" value={form.patient.admissionDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, admissionDate: e.target.value}}))} className="input" />
+              </FormField>
+              <FormField label={isEn ? "Discharge Date" : "Fecha de Alta"}>
+                <input type="date" value={form.patient.dischargeDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, dischargeDate: e.target.value}}))} className="input" />
               </FormField>
             </div>
 
@@ -717,9 +803,16 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                       </div>
                     </div>
                     {form.outcome.accidentalExtubation === 1 && (
-                      <div className="mt-6 pt-6 border-t border-rose-200/50 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in slide-in-from-top-2 fade-in">
-                        <FormField label={isEn ? "Number of Events" : "Número de Eventos"}><input type="number" value={form.outcome.accidentalExtubationCount} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, accidentalExtubationCount: Number(e.target.value)}}))} className="input bg-white" /></FormField>
+                      <div className="mt-6 pt-6 border-t border-rose-200/50 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 animate-in slide-in-from-top-2 fade-in">
+                        <FormField label={isEn ? "Number of Events" : "Número de Eventos"}><input type="number" min="1" value={form.outcome.accidentalExtubationCount} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, accidentalExtubationCount: Number(e.target.value)}}))} className="input bg-white" /></FormField>
                         <FormField label={isEn ? "New Tube Size" : "Nuevo Tamaño Tubo"}><input type="number" step="0.5" value={form.outcome.newTubeSizeAccidental} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeSizeAccidental: Number(e.target.value)}}))} className="input bg-white" /></FormField>
+                        <FormField label={isEn ? "Reintubation Tube Type" : "Tipo de Tubo Reintubación"}>
+                          <select value={form.outcome.newTubeTypeAccidentalCuffed} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeTypeAccidentalCuffed: Number(e.target.value) as 0|1|2}}))} className="input bg-white">
+                            <option value={0}>-- {isEn ? 'Select' : 'Seleccionar'} --</option>
+                            <option value={1}>{isEn ? 'Cuffed' : 'Con Neumo'}</option>
+                            <option value={2}>{isEn ? 'Uncuffed' : 'Sin Neumo'}</option>
+                          </select>
+                        </FormField>
                         <FormField label={isEn ? "CPR Required" : "Requirió RCP"}><BooleanToggle value={form.outcome.requiedCprPostAccidental} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, requiedCprPostAccidental: v}}))} isEn={isEn} /></FormField>
                       </div>
                     )}
