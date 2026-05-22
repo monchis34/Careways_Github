@@ -16,6 +16,7 @@ interface ClinicianFlowProps {
   onExit?: () => void;
   role?: string;
   state?: any;
+  editMrn?: string | null;
 }
 
 const geoData: Record<string, Record<string, string[]>> = {
@@ -104,7 +105,7 @@ const PRIMARY_DIAGNOSES = [
   "Meningitis / Encephalitis",
 ];
 
-export default function ClinicianFlow({ onComplete, onSave, onExit, state }: ClinicianFlowProps) {
+export default function ClinicianFlow({ onComplete, onSave, onExit, state, editMrn }: ClinicianFlowProps) {
   const { language } = useLanguage();
   const isEn = language === 'en';
   const [isSending, setIsSending] = useState(false);
@@ -138,6 +139,58 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state }: Cli
       name: '', idNumber: '', phoneCode: '+1', phone: '', email: ''
     }
   });
+
+  useEffect(() => {
+    if (editMrn) {
+      let loadedMetadata: any = null;
+      let logsList: any[] = [];
+      const saved = localStorage.getItem(`autosave_draft_${editMrn}`);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.form) {
+            setForm(parsed.form);
+            if (parsed.activeSection) setActiveSection(parsed.activeSection);
+            
+            logsList.push({
+               name: parsed.lastUser || (isEn ? "Previous User" : "Usuario Previo"),
+               role: parsed.lastRole || "Clinician",
+               action: isEn ? "Draft Auto-saved" : "Borrador Guardado",
+               time: parsed.timestamp ? differenceInDays(new Date(), parseISO(parsed.timestamp)) === 0 
+                  ? format(parseISO(parsed.timestamp), "HH:mm") 
+                  : format(parseISO(parsed.timestamp), "MM/dd") 
+                  : "Recently"
+            });
+            setEditLogs(logsList);
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // If no draft or failed to parse, try state
+      if (state?.patients) {
+        const pat = state.patients.find((p: any) => p.mrn === editMrn);
+        if (pat) {
+          const out = state.outcomes?.find((o: any) => o.patientHash === pat.patientHash);
+          const par = state.parentPatients?.find((p: any) => p.patientHash === pat.patientHash);
+          setForm(f => ({
+            ...f,
+            patient: { ...f.patient, ...pat },
+            outcome: { ...f.outcome, ...(out || {}) },
+            caregiver: { ...f.caregiver, ...(par || {}) }
+          }));
+          
+          logsList.push({
+             name: isEn ? "System" : "Sistema",
+             role: "Record",
+             action: isEn ? "Finalized Clinical Record" : "Registro Clínico Finalizado",
+             time: pat.admissionDate
+          });
+          setEditLogs(logsList);
+        }
+      }
+    }
+  }, [editMrn, state, isEn]);
 
   const age = useMemo(() => {
     if (!form.patient.birthDate) return { label: '---', rawYears: 0 };
@@ -202,12 +255,20 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state }: Cli
     return { score: score.toFixed(2), prob: (prob * 100).toFixed(2) };
   }, [form.outcome]);
 
+  const [editLogs, setEditLogs] = useState<{name: string, role: string, action: string, time: string}[]>([]);
+
   useEffect(() => {
     if (form.patient.mrn && form.patient.mrn.length >= 3) {
-      const payload = { form, activeSection };
+      const payload = { 
+        form, 
+        activeSection, 
+        lastUser: state?.currentUser?.name || "Dr. Staff", 
+        lastRole: state?.currentUser?.role || "Clinician",
+        timestamp: new Date().toISOString()
+      };
       localStorage.setItem(`autosave_draft_${form.patient.mrn}`, JSON.stringify(payload));
     }
-  }, [form, activeSection]);
+  }, [form, activeSection, state]);
 
   // Dynamic Validation Panel
   const missingFields: { label: string; sectionId: string }[] = [];
@@ -453,11 +514,11 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state }: Cli
               <History className="w-4 h-4" /> {isEn ? 'Clinical Activity Log' : 'Bitácora Clínica'}
             </h3>
             <div className="overflow-y-auto pr-2 space-y-4 flex-1 custom-scrollbar">
-               {[
+               {(editLogs.length > 0 ? editLogs : [
                  { name: "Dr. Juan Pérez", role: "Physician", action: isEn ? "Updated PIM3 variables" : "Actualizó variables PIM3", time: "10 min ago" },
                  { name: "Ana Gómez", role: "Nurse", action: isEn ? "Updated airway data" : "Actualizó datos de vía aérea", time: "1 hr ago" },
                  { name: "Carlos Ruiz", role: "Respiratory Therapist", action: isEn ? "Initial admission registry" : "Registro de admisión inicial", time: "2 hrs ago" }
-               ].map((log, i) => (
+               ]).map((log, i) => (
                  <div key={i} className="flex gap-3 text-sm">
                     <div className="w-2 h-2 mt-1.5 rounded-full bg-blue-400 flex-shrink-0"></div>
                     <div>

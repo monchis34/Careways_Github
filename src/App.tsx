@@ -48,6 +48,8 @@ export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [authenticatedUser, setAuthenticatedUser] = useState<AppUser | null>(null);
   
+  const [editMrn, setEditMrn] = useState<string | null>(null);
+
   const [state, setState] = useState<AppState>(() => {
     const seed = generateSeedData();
     return {
@@ -82,12 +84,29 @@ export default function App() {
   };
 
   const addPatientData = (patient: Patient, outcome: Outcome, parentPatient: ParentPatient) => {
-    setState(prev => ({
-      ...prev,
-      patients: [patient, ...prev.patients],
-      outcomes: [outcome, ...prev.outcomes],
-      parentPatients: [parentPatient, ...prev.parentPatients]
-    }));
+    setState(prev => {
+      const pIdx = prev.patients.findIndex(p => p.patientHash === patient.patientHash);
+      const newPatients = [...prev.patients];
+      if (pIdx > -1) newPatients[pIdx] = patient;
+      else newPatients.unshift(patient);
+
+      const oIdx = prev.outcomes.findIndex(o => o.patientHash === outcome.patientHash);
+      const newOutcomes = [...prev.outcomes];
+      if (oIdx > -1) newOutcomes[oIdx] = outcome;
+      else newOutcomes.unshift(outcome);
+
+      const ppIdx = prev.parentPatients.findIndex(p => p.patientHash === parentPatient.patientHash);
+      const newParentPatients = [...prev.parentPatients];
+      if (ppIdx > -1) newParentPatients[ppIdx] = parentPatient;
+      else newParentPatients.unshift(parentPatient);
+
+      return {
+        ...prev,
+        patients: newPatients,
+        outcomes: newOutcomes,
+        parentPatients: newParentPatients
+      };
+    });
   };
 
   const bulkAddUsers = (newUsers: AppUser[]) => {
@@ -211,7 +230,7 @@ export default function App() {
       );
     }
     if (activeView === 'individual') {
-      return <ClinicianFlow onSave={(p,o,pp) => addPatientData(p,o,pp)} onComplete={(p, o, pp) => { setActiveView('registry'); }} onExit={() => setActiveView('registry')} role={state.currentUser?.role} state={state} />;
+      return <ClinicianFlow editMrn={editMrn} onSave={(p,o,pp) => addPatientData(p,o,pp)} onComplete={(p, o, pp) => { setActiveView('registry'); setEditMrn(null); }} onExit={() => { setActiveView('registry'); setEditMrn(null); }} role={state.currentUser?.role} state={state} />;
     }
 
     if (activeView === 'registry') {
@@ -230,7 +249,7 @@ export default function App() {
       case 'ClinicalTrainer':
         return <DashboardView state={state} />;
       case 'Clinician':
-        return <ClinicianFlow onSave={addPatientData} onComplete={() => {}} role={role} state={state} />; 
+        return <ClinicianFlow editMrn={editMrn} onSave={addPatientData} onComplete={() => {setActiveView('registry'); setEditMrn(null);}} role={role} state={state} />; 
       case 'Caregiver':
       case 'Guest':
         return <CaregiverView role={role} />;
@@ -247,7 +266,7 @@ export default function App() {
         </div>
         <div className="flex-1 flex flex-col min-w-0 print:block">
           <div className="print:hidden">
-            <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} />
+            <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} onSearchSelect={(mrn) => { setEditMrn(mrn); setActiveView('individual'); }} />
           </div>
           <main className="flex-1 overflow-y-auto p-6 md:p-8 print:overflow-visible print:p-0">
             <AnimatePresence mode="wait">
