@@ -4,13 +4,14 @@ import { generatePatientHash } from '../store';
 import { useLanguage } from '../App';
 import { 
   User, Wind, AlertTriangle, Activity, TrendingDown,
-  FileText, ShieldCheck, CheckCircle2, AlertCircle, Loader2, Info, History
+  FileText, ShieldCheck, CheckCircle2, AlertCircle, Loader2, Info, History, Printer, Download
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { format, differenceInDays, parseISO, isValid } from 'date-fns';
 
 interface ClinicianFlowProps {
   onComplete: (patient: Patient, outcome: Outcome, parentPatient: ParentPatient) => void;
+  onSave?: (patient: Patient, outcome: Outcome, parentPatient: ParentPatient) => void;
   onBulkComplete?: (patients: Patient[], outcomes: Outcome[], parentPatients: ParentPatient[]) => void;
   onExit?: () => void;
   role?: string;
@@ -103,11 +104,12 @@ const PRIMARY_DIAGNOSES = [
   "Meningitis / Encephalitis",
 ];
 
-export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFlowProps) {
+export default function ClinicianFlow({ onComplete, onSave, onExit, state }: ClinicianFlowProps) {
   const { language } = useLanguage();
   const isEn = language === 'en';
   const [isSending, setIsSending] = useState(false);
   const [activeSection, setActiveSection] = useState('identification');
+  const [successData, setSuccessData] = useState<{pat: Patient, out: Outcome, par: ParentPatient} | null>(null);
 
   const [form, setForm] = useState({
     patient: {
@@ -268,6 +270,15 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
     }
   }
 
+  if (form.outcome.electiveTubeChange === 1) {
+    if (!form.outcome.newTubeSizeElective || form.outcome.newTubeSizeElective < 2 || form.outcome.newTubeSizeElective > 10) {
+      missingFields.push({ label: isEn ? 'Invalid/Missing elective new tube size (2.0-10.0)' : 'Tamaño de nuevo tubo electivo inválido o faltante (2.0-10.0)', sectionId: 'events' });
+    }
+    if (form.outcome.newTubeTypeElectiveCuffed === 0) {
+      missingFields.push({ label: isEn ? 'Elective new tube type missing' : 'Tipo de nuevo tubo electivo faltante', sectionId: 'events' });
+    }
+  }
+
   if (form.outcome.electiveExtubation === 1) {
     if (form.outcome.reintubationNeededPostElective === 0) {
       missingFields.push({ label: isEn ? 'Reintubation after elective extubation missing' : 'Reintubación post extubación electiva faltante', sectionId: 'events' });
@@ -353,7 +364,11 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
       name: form.caregiver.name, phone: `${form.caregiver.phoneCode} ${form.caregiver.phone}`,
       email: form.caregiver.email, consent: true, educationActivated: true, educationProgress: 0
     };
-    onComplete(pat, out, par);
+    if (onSave) {
+      onSave(pat, out, par);
+    }
+    setSuccessData({ pat, out, par });
+    setIsSending(false);
   };
 
   const handleCountryChange = (country: string) => {
@@ -368,8 +383,8 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
   const currentHospitals = form.patient.country && form.patient.city ? (geoData[form.patient.country][form.patient.city] || []) : [];
 
   return (
-    <div className="h-full flex flex-col pt-2 -mx-4 -mt-4 bg-[#F5F5F5]">
-      <div className="sticky top-0 z-50 bg-[#204071] text-white p-4 shadow-md flex items-center justify-between mx-4 mt-4 rounded-2xl">
+    <div className="h-full flex flex-col pt-2 -mx-4 -mt-4 bg-[#F5F5F5] print:overflow-visible print:h-auto print:bg-white print:m-0 print:pt-0">
+      <div className="sticky top-0 z-50 bg-[#204071] text-white p-4 shadow-md flex items-center justify-between mx-4 mt-4 rounded-2xl print:hidden">
         <div>
           <h1 className="font-bold">{form.patient.name || (isEn ? 'New Patient' : 'Nuevo Paciente')}</h1>
           <p className="text-xs text-blue-200">
@@ -415,7 +430,7 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden p-4 gap-6 relative">
+      <div className="flex-1 flex overflow-hidden p-4 gap-6 relative print:hidden">
         {/* Scroll Spy Sidebar */}
         <div className="w-64 flex flex-col gap-4 hidden lg:flex flex-shrink-0 relative">
           <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
@@ -656,9 +671,37 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
                         <span className="font-black text-amber-900 block">D2. {isEn?'Elective Tube Change':'Cambio Electivo de Tubo'}</span>
                       </div>
                       <div className="w-48">
-                        <BooleanToggle value={form.outcome.electiveTubeChange} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, electiveTubeChange: v}}))} isEn={isEn} />
+                        <BooleanToggle 
+                          value={form.outcome.electiveTubeChange} 
+                          onChange={(v:any) => setForm(f=>({
+                             ...f, 
+                             outcome: {
+                               ...f.outcome, 
+                               electiveTubeChange: v,
+                               ...(v === 2 ? {
+                                  newTubeSizeElective: 0,
+                                  newTubeTypeElectiveCuffed: 0
+                               } : {})
+                             }
+                          }))} 
+                          isEn={isEn} 
+                        />
                       </div>
                     </div>
+                    {form.outcome.electiveTubeChange === 1 && (
+                      <div className="mt-6 pt-6 border-t border-amber-200/50 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in slide-in-from-top-2 fade-in">
+                        <FormField label={isEn ? "New Tube Size" : "Nuevo Tamaño Tubo"}>
+                          <input type="number" step="0.5" min="2" max="10" value={form.outcome.newTubeSizeElective || ''} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeSizeElective: Number(e.target.value)}}))} className="input bg-white" />
+                        </FormField>
+                        <FormField label={isEn ? "Elective Tube Type" : "Tipo de Tubo Electivo"}>
+                          <select value={form.outcome.newTubeTypeElectiveCuffed} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeTypeElectiveCuffed: Number(e.target.value) as 0|1|2}}))} className="input bg-white">
+                            <option value={0}>-- {isEn ? 'Select' : 'Seleccionar'} --</option>
+                            <option value={1}>{isEn ? 'Cuffed' : 'Con Neumo'}</option>
+                            <option value={2}>{isEn ? 'Uncuffed' : 'Sin Neumo'}</option>
+                          </select>
+                        </FormField>
+                      </div>
+                    )}
                   </div>
 
                   {/* Event 3 */}
@@ -919,6 +962,156 @@ export default function ClinicianFlow({ onComplete, onExit, state }: ClinicianFl
           </div>
         </div>
       </div>
+
+      {successData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#204071]/80 backdrop-blur-sm print:hidden p-4">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full animate-in zoom-in-95 duration-300">
+            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mb-6 text-emerald-600 mx-auto">
+               <CheckCircle2 className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-black text-center text-[#204071] mb-2">{isEn ? 'Patient Record Saved Successfully' : 'Registro de Paciente Guardado'}</h2>
+            
+            <div className="bg-gray-50 p-5 rounded-2xl space-y-4 mb-8 border border-gray-100 mt-6 text-sm">
+               <div className="flex justify-between border-b border-gray-200 pb-3">
+                 <span className="font-bold text-gray-500 uppercase text-xs">{isEn ? 'Patient Name' : 'Nombre Completo'}</span>
+                 <span className="font-bold text-gray-900">{successData.pat.name}</span>
+               </div>
+               <div className="flex justify-between border-b border-gray-200 pb-3">
+                 <span className="font-bold text-gray-500 uppercase text-xs">{isEn ? 'Patient ID' : 'ID Paciente'}</span>
+                 <span className="font-bold text-gray-900">{successData.pat.mrn}</span>
+               </div>
+               <div className="flex justify-between border-b border-gray-200 pb-3">
+                 <span className="font-bold text-gray-500 uppercase text-xs">{isEn ? 'Hospital' : 'Hospital'}</span>
+                 <span className="font-bold text-gray-900">{successData.pat.hospital}</span>
+               </div>
+               <div className="flex justify-between border-b border-gray-200 pb-3">
+                 <span className="font-bold text-gray-500 uppercase text-xs">{isEn ? 'Date & Time' : 'Fecha y Hora'}</span>
+                 <span className="font-bold text-gray-900">{format(new Date(), 'yyyy-MM-dd HH:mm')}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="font-bold text-gray-500 uppercase text-xs">{isEn ? 'Recorded by' : 'Registrado por'}</span>
+                 <span className="font-bold text-gray-900">{state?.currentUser?.name || (isEn ? 'Dr. Juan Pérez' : 'Dr. Juan Pérez')}</span>
+               </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+               <button onClick={() => window.print()} className="w-full py-3.5 rounded-xl bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors flex justify-center items-center gap-2">
+                 <Printer className="w-5 h-5"/> {isEn ? 'Print Record' : 'Imprimir Registro'}
+               </button>
+               <button onClick={() => window.print()} className="w-full py-3.5 rounded-xl bg-gray-50 text-gray-700 font-bold hover:bg-gray-100 transition-colors flex justify-center items-center gap-2">
+                 <Download className="w-5 h-5"/> {isEn ? 'Download PDF' : 'Descargar PDF'}
+               </button>
+               <button 
+                  onClick={() => {
+                     setSuccessData(null);
+                     if (onComplete) onComplete(successData.pat, successData.out, successData.par);
+                  }} 
+                  className="w-full py-3.5 rounded-xl border-2 border-gray-200 text-gray-500 font-bold hover:bg-gray-50 hover:text-gray-700 transition-colors mt-2"
+               >
+                 {isEn ? 'Close & Continue' : 'Cerrar y Continuar'}
+               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Clinical Record */}
+      {successData && (
+        <div className="hidden print:block absolute top-0 left-0 w-full min-h-screen bg-white z-[99999] text-black">
+           <div className="max-w-4xl mx-auto p-12 print-content">
+              <div className="border-b-4 border-black pb-6 mb-8 flex justify-between items-end">
+                 <div>
+                   <h1 className="text-4xl font-black">{isEn ? 'CLINICAL PATIENT REPORT' : 'HISTORIA CLÍNICA'}</h1>
+                   <p className="text-gray-500 mt-2 font-bold">{successData.pat.hospital} • {successData.pat.city}, {successData.pat.country}</p>
+                 </div>
+                 <div className="text-right">
+                   <p className="font-bold text-lg">{format(new Date(), 'yyyy-MM-dd HH:mm')}</p>
+                   <p className="text-sm text-gray-500">{isEn ? 'Recorded by:' : 'Registrado por:'} {state?.currentUser?.name || 'Dr. Juan Pérez'}</p>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-12 mb-12">
+                 <div>
+                   <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4 uppercase">{isEn ? 'Patient Details' : 'Datos del Paciente'}</h2>
+                   <div className="space-y-2">
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Name:' : 'Nombre:'}</span> {successData.pat.name}</p>
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Record ID:' : 'ID:'}</span> {successData.pat.mrn}</p>
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'DOB / Type:' : 'Fecha Nac. / Tipo:'}</span> {successData.pat.birthDate} ({successData.pat.type})</p>
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Gender:' : 'Género:'}</span> {successData.pat.gender}</p>
+                   </div>
+                 </div>
+                 <div>
+                   <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4 uppercase">{isEn ? 'Caregiver Details' : 'Datos del Cuidador'}</h2>
+                   <div className="space-y-2">
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Name:' : 'Nombre:'}</span> {successData.par.name}</p>
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Contact:' : 'Contacto:'}</span> {successData.par.phone}</p>
+                     <p><span className="font-bold mr-2 uppercase text-xs">{isEn ? 'Email:' : 'Correo:'}</span> {successData.par.email}</p>
+                   </div>
+                 </div>
+              </div>
+
+              <div className="mb-12">
+                 <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4 uppercase">{isEn ? 'Clinical Abstract' : 'Resumen Clínico'}</h2>
+                 <div className="grid grid-cols-3 gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-200">
+                   <div>
+                     <p className="text-xs font-bold text-gray-500 uppercase">{isEn ? 'Admission Date' : 'Fecha de Ingreso'}</p>
+                     <p className="text-lg font-black">{successData.pat.admissionDate}</p>
+                   </div>
+                   <div>
+                     <p className="text-xs font-bold text-gray-500 uppercase">{isEn ? 'Outcome Status' : 'Estado de Egreso'}</p>
+                     <p className="text-lg font-black">{successData.out.status}</p>
+                   </div>
+                   <div>
+                     <p className="text-xs font-bold text-gray-500 uppercase">{isEn ? 'Risk Category' : 'Categoría de Riesgo'}</p>
+                     <p className="text-lg font-black">{successData.out.riskCategory}</p>
+                   </div>
+                 </div>
+              </div>
+              
+              <div className="mb-12">
+                 <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4 uppercase">{isEn ? 'Airway Management' : 'Manejo de Vía Aérea'}</h2>
+                 <div className="space-y-4">
+                     <p><span className="font-bold mr-2">{isEn ? 'Intubated:' : 'Intubado:'}</span> {successData.out.intubated === 1 ? 'Yes' : 'No'}</p>
+                     {successData.out.intubated === 1 && (
+                       <div className="pl-4 border-l-2 border-gray-300 space-y-2">
+                          <p><span className="font-bold">{isEn ? 'Intubation Date/Time:' : 'Fecha/Hora Intubación:'}</span> {successData.out.intubationDateTime}</p>
+                          <p><span className="font-bold">{isEn ? 'Tube Details:' : 'Detalles de Tubo:'}</span> {isEn?'Size':'Tamaño'} {successData.out.tubeSize} ({successData.out.tubeTypeCuffed === 1 ? (isEn?'Cuffed':'Con Neumo') : (isEn?'Uncuffed':'Sin Neumo')})</p>
+                          <p><span className="font-bold">{isEn ? 'Subglottic Secretion Drainage:' : 'Aspiración Subglótica:'}</span> {successData.out.subglotticSecretionDrainage === 1 ? 'Yes' : 'No'}</p>
+                       </div>
+                     )}
+                 </div>
+              </div>
+              
+              <div className="mb-12">
+                 <h2 className="text-xl font-bold border-b border-gray-300 pb-2 mb-4 uppercase">{isEn ? 'Critical Events' : 'Eventos Críticos'}</h2>
+                 <ul className="list-disc pl-5 space-y-2">
+                    {successData.out.accidentalExtubation === 1 && (
+                       <li>
+                         <span className="font-bold">{isEn ? 'Accidental Extubation' : 'Extubación Accidental'}</span> 
+                         ({successData.out.accidentalExtubationCount} {isEn ? 'events' : 'eventos'}, CPR: {successData.out.requiedCprPostAccidental === 1 ? 'Yes' : 'No'})
+                       </li>
+                    )}
+                    {successData.out.electiveTubeChange === 1 && (
+                       <li>
+                         <span className="font-bold">{isEn ? 'Elective Tube Change' : 'Cambio Electivo de Tubo'}</span> 
+                         ({isEn?'New Size':'Nuevo Tamaño'}: {successData.out.newTubeSizeElective}, {isEn?'Type':'Tipo'}: {successData.out.newTubeTypeElectiveCuffed === 1 ? (isEn?'Cuffed':'Con Neumo') : (isEn?'Uncuffed':'Sin Neumo')})
+                       </li>
+                    )}
+                    {successData.out.electiveExtubation === 1 && (
+                       <li>
+                         <span className="font-bold">{isEn ? 'Elective Extubation' : 'Extubación Electiva'}</span> 
+                         ({isEn?'Success Date':'Fecha Exito'}: {successData.out.successfulExtubationDate})
+                       </li>
+                    )}
+                    {successData.out.accidentalExtubation !== 1 && successData.out.electiveTubeChange !== 1 && successData.out.electiveExtubation !== 1 && (
+                       <li className="text-gray-500 italic">{isEn ? 'No critical events reported.' : 'Sin eventos críticos.'}</li>
+                    )}
+                 </ul>
+              </div>
+
+           </div>
+        </div>
+      )}
     </div>
   );
 }

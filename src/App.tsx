@@ -211,7 +211,7 @@ export default function App() {
       );
     }
     if (activeView === 'individual') {
-      return <ClinicianFlow onComplete={(p, o, pp) => { addPatientData(p, o, pp); setActiveView('registry'); }} onExit={() => setActiveView('registry')} role={state.currentUser?.role} state={state} />;
+      return <ClinicianFlow onSave={(p,o,pp) => addPatientData(p,o,pp)} onComplete={(p, o, pp) => { setActiveView('registry'); }} onExit={() => setActiveView('registry')} role={state.currentUser?.role} state={state} />;
     }
 
     if (activeView === 'registry') {
@@ -230,7 +230,7 @@ export default function App() {
       case 'ClinicalTrainer':
         return <DashboardView state={state} />;
       case 'Clinician':
-        return <ClinicianFlow onComplete={addPatientData} onBulkComplete={bulkAddPatients} role={role} state={state} />; 
+        return <ClinicianFlow onSave={addPatientData} onComplete={() => {}} role={role} state={state} />; 
       case 'Caregiver':
       case 'Guest':
         return <CaregiverView role={role} />;
@@ -241,11 +241,15 @@ export default function App() {
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>
-      <div className="flex h-screen bg-[#f7f9fb] overflow-hidden font-sans">
-        <Sidebar role={state.currentUser.role} baseRole={authenticatedUser?.role} onRoleChange={(role) => handleLogin(role)} onLogout={handleLogout} activeView={activeView} onViewChange={setActiveView} />
-        <div className="flex-1 flex flex-col min-w-0">
-          <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} />
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
+      <div className="flex h-screen bg-[#f7f9fb] font-sans overflow-hidden print:overflow-visible print:h-auto">
+        <div className="print:hidden h-full flex">
+          <Sidebar role={state.currentUser.role} baseRole={authenticatedUser?.role} onRoleChange={(role) => handleLogin(role)} onLogout={handleLogout} activeView={activeView} onViewChange={setActiveView} />
+        </div>
+        <div className="flex-1 flex flex-col min-w-0 print:block">
+          <div className="print:hidden">
+            <Header user={state.currentUser} onLanguageChange={setLanguage} currentLanguage={language} state={state} />
+          </div>
+          <main className="flex-1 overflow-y-auto p-6 md:p-8 print:overflow-visible print:p-0">
             <AnimatePresence mode="wait">
               <motion.div
                 key={`${state.currentUser?.role}-${activeView}`}
@@ -253,7 +257,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.3 }}
-                className="h-full"
+                className="h-full print:h-auto"
               >
                 {renderContent()}
               </motion.div>
