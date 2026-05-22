@@ -40,69 +40,107 @@ const geoData: Record<string, Record<string, string[]>> = {
 
 const COUNTRIES = Object.keys(geoData);
 
-const RISK_SUBTYPES: Record<string, { value: string, label: string, desc?: string }[]> = {
+const LOCALIZED_COUNTRIES: Record<string, I18nString> = {
+  'USA': { en: 'USA', es: 'EE. UU.' },
+  'Colombia': { en: 'Colombia', es: 'Colombia' },
+  'Mexico': { en: 'Mexico', es: 'México' },
+  'Spain': { en: 'Spain', es: 'España' }
+};
+
+type I18nString = { en: string; es: string };
+
+const getLocalizedLabel = (item: { label: I18nString } | undefined | null, isEn: boolean): string => {
+  if (!item) return '';
+  return isEn ? item.label.en : item.label.es;
+};
+
+const getLocalizedDesc = (item: { desc?: I18nString } | undefined | null, isEn: boolean): string => {
+  if (!item || !item.desc) return '';
+  return isEn ? item.desc.en : item.desc.es;
+};
+
+const RISK_SUBTYPES: Record<string, { value: string, label: I18nString, desc?: I18nString }[]> = {
   'Low Risk': [
-    { value: 'asthma', label: 'Asthma' },
-    { value: 'bronchiolitis', label: 'Bronchiolitis' },
-    { value: 'croup', label: 'Croup (laryngotracheitis)' },
-    { value: 'osa', label: 'Obstructive sleep apnea' },
-    { value: 'dka', label: 'Diabetic ketoacidosis' },
-    { value: 'seizure', label: 'Seizure disorders' }
+    { value: 'asthma', label: { en: 'Asthma', es: 'Asma' } },
+    { value: 'bronchiolitis', label: { en: 'Bronchiolitis', es: 'Bronquiolitis' } },
+    { value: 'croup', label: { en: 'Croup (laryngotracheitis)', es: 'Crup (Laringotraqueítis)' } },
+    { value: 'osa', label: { en: 'Obstructive sleep apnea', es: 'Apnea obstructiva del sueño' } },
+    { value: 'dka', label: { en: 'Diabetic ketoacidosis', es: 'Cetoacidosis diabética' } },
+    { value: 'seizure', label: { en: 'Seizure disorders', es: 'Trastornos convulsivos' } }
   ],
   'High Risk': [
-    { value: 'hemorrhage', label: 'Spontaneous cerebral hemorrhage', desc: 'e.g., intracranial bleed without prior known condition' },
-    { value: 'cardiomyopathy', label: 'Cardiomyopathy or myocarditis', desc: 'severe heart muscle disease or inflammation' },
-    { value: 'hlhs', label: 'Hypoplastic left heart syndrome (HLHS)', desc: 'or other severe congenital heart defects requiring urgent intervention' },
-    { value: 'neuro', label: 'Neurodegenerative disorders', desc: 'e.g., severe progressive neurological conditions' },
-    { value: 'nec', label: 'Necrotizing enterocolitis (NEC)', desc: 'in infants, especially with severe forms' }
+    { value: 'hemorrhage', label: { en: 'Spontaneous cerebral hemorrhage', es: 'Hemorragia cerebral espontánea' }, desc: { en: 'e.g., intracranial bleed without prior known condition', es: 'ej., sangrado intracraneal sin condición previa' } },
+    { value: 'cardiomyopathy', label: { en: 'Cardiomyopathy or myocarditis', es: 'Miocardiopatía o miocarditis' }, desc: { en: 'severe heart muscle disease or inflammation', es: 'enfermedad grave del músculo cardíaco o inflamación' } },
+    { value: 'hlhs', label: { en: 'Hypoplastic left heart syndrome (HLHS)', es: 'Síndrome de corazón izquierdo hipoplásico (SCIH)' }, desc: { en: 'or other severe congenital heart defects requiring urgent intervention', es: 'u otros defectos cardíacos congénitos graves que requieren intervención urgente' } },
+    { value: 'neuro', label: { en: 'Neurodegenerative disorders', es: 'Trastornos neurodegenerativos' }, desc: { en: 'e.g., severe progressive neurological conditions', es: 'ej., condiciones neurológicas progresivas severas' } },
+    { value: 'nec', label: { en: 'Necrotizing enterocolitis (NEC)', es: 'Enterocolitis necrotizante (ECN)' }, desc: { en: 'in infants, especially with severe forms', es: 'en lactantes, especialmente en formas graves' } }
   ],
   'Very High Risk': [
-    { value: 'cardiac_arrest', label: 'Cardiac arrest before ICU admission' },
-    { value: 'scid', label: 'Severe combined immunodeficiency (SCID)' },
-    { value: 'leukemia', label: 'Post-induction leukemia/lymphoma' },
-    { value: 'bone_marrow', label: 'Bone marrow transplant recipient' },
-    { value: 'liver_failure', label: 'Severe liver failure' }
+    { value: 'cardiac_arrest', label: { en: 'Cardiac arrest before ICU admission', es: 'Paro cardíaco antes del ingreso a UCI' } },
+    { value: 'scid', label: { en: 'Severe combined immunodeficiency (SCID)', es: 'Inmunodeficiencia combinada grave (SCID)' } },
+    { value: 'leukemia', label: { en: 'Post-induction leukemia/lymphoma', es: 'Leucemia/linfoma post-inducción' } },
+    { value: 'bone_marrow', label: { en: 'Bone marrow transplant recipient', es: 'Receptor de trasplante de médula ósea' } },
+    { value: 'liver_failure', label: { en: 'Severe liver failure', es: 'Insuficiencia hepática grave' } }
   ]
 };
 
-const INDICATIONS = [
-  { value: '1. Respiratory Failure', desc: 'Hypoxemia, hypercapnia, ARDS, pneumonia, aspiration' },
-  { value: '2. Upper Airway Obstruction', desc: 'Severe croup, subglottic stenosis, epiglottitis, foreign body' },
-  { value: '3. Neuromuscular Weakness', desc: 'Guillain-Barré, muscular dystrophy, SMA, botulism' },
-  { value: '4. Respiratory Drive Impairment', desc: 'Central apnea, drug-induced, hypoventilation' },
-  { value: '5. Airway Protection', desc: 'GCS < 8, absent gag/cough reflex' },
-  { value: '6. Hemodynamic Instability', desc: 'Shock, cardiac arrest, CPR' },
-  { value: '7. Therapeutic Ventilation', desc: 'ICP control, pulmonary hypertension crisis, metabolic acidosis' },
-  { value: '8. Pulmonary Hygiene', desc: 'Inability to clear secretions, atelectasis' },
-  { value: '9. Procedures / Sedation', desc: 'Surgical procedures, deep sedation, MRI' },
-  { value: '10. Post-Operative', desc: 'Cardiac, airway, neurosurgery' },
-  { value: '99. Other', desc: '' }
+const INDICATIONS: { value: string, label: I18nString, desc: I18nString }[] = [
+  { value: 'resp_failure', label: { en: '1. Respiratory Failure', es: '1. Insuficiencia Respiratoria' }, desc: { en: 'Hypoxemia, hypercapnia, ARDS, pneumonia, aspiration', es: 'Hipoxemia, hipercapnia, SDRA, neumonía, aspiración' } },
+  { value: 'upper_airway', label: { en: '2. Upper Airway Obstruction', es: '2. Obstrucción de Vía Aérea Superior' }, desc: { en: 'Severe croup, subglottic stenosis, epiglottitis, foreign body', es: 'Crup severo, estenosis subglótica, epiglotitis, cuerpo extraño' } },
+  { value: 'neuro_weakness', label: { en: '3. Neuromuscular Weakness', es: '3. Debilidad Neuromuscular' }, desc: { en: 'Guillain-Barré, muscular dystrophy, SMA, botulism', es: 'Guillain-Barré, distrofia muscular, AME, botulismo' } },
+  { value: 'drive_impairment', label: { en: '4. Respiratory Drive Impairment', es: '4. Alteración del Impulso Respiratorio' }, desc: { en: 'Central apnea, drug-induced, hypoventilation', es: 'Apnea central, inducida por fármacos, hipoventilación' } },
+  { value: 'airway_protection', label: { en: '5. Airway Protection', es: '5. Protección de Vía Aérea' }, desc: { en: 'GCS < 8, absent gag/cough reflex', es: 'Glasgow < 8, ausencia de reflejo nauseoso/tusígeno' } },
+  { value: 'hemodynamic', label: { en: '6. Hemodynamic Instability', es: '6. Inestabilidad Hemodinámica' }, desc: { en: 'Shock, cardiac arrest, CPR', es: 'Shock, paro cardíaco, RCP' } },
+  { value: 'therapeutic_vent', label: { en: '7. Therapeutic Ventilation', es: '7. Ventilación Terapéutica' }, desc: { en: 'ICP control, pulmonary hypertension crisis, metabolic acidosis', es: 'Control de PIC, crisis de hipertensión pulmonar, acidosis metabólica' } },
+  { value: 'pulm_hygiene', label: { en: '8. Pulmonary Hygiene', es: '8. Higiene Pulmonar' }, desc: { en: 'Inability to clear secretions, atelectasis', es: 'Incapacidad para eliminar secreciones, atelectasia' } },
+  { value: 'procedures', label: { en: '9. Procedures / Sedation', es: '9. Procedimientos / Sedación' }, desc: { en: 'Surgical procedures, deep sedation, MRI', es: 'Procedimientos quirúrgicos, sedación profunda, RM' } },
+  { value: 'post_op', label: { en: '10. Post-Operative', es: '10. Postoperatorio' }, desc: { en: 'Cardiac, airway, neurosurgery', es: 'Cirugía cardíaca, vía aérea, neurocirugía' } },
+  { value: 'other', label: { en: '99. Other', es: '99. Otro' }, desc: { en: '', es: '' } }
 ];
 
-const PRIMARY_DIAGNOSES = [
-  "Asthma",
-  "Bronchiolitis",
-  "Croup (laryngotracheitis)",
-  "Obstructive sleep apnea",
-  "Diabetic ketoacidosis",
-  "Seizure disorders",
-  "Spontaneous cerebral hemorrhage",
-  "Cardiomyopathy or myocarditis",
-  "Hypoplastic left heart syndrome (HLHS)",
-  "Neurodegenerative disorders",
-  "Necrotizing enterocolitis (NEC)",
-  "Cardiac arrest before ICU admission",
-  "Severe combined immunodeficiency (SCID)",
-  "Post-induction leukemia/lymphoma",
-  "Bone marrow transplant recipient",
-  "Severe liver failure",
-  "Pneumonia",
-  "Sepsis / Septic Shock",
-  "Traumatic Brain Injury",
-  "Congenital Heart Disease (Other)",
-  "Respiratory distress syndrome",
-  "Acute kidney injury",
-  "Meningitis / Encephalitis",
+const RISK_CATEGORIES: { id: string, label: I18nString }[] = [
+  { id: 'None', label: { en: 'None / Average Risk', es: 'Ninguna / Riesgo Promedio' } },
+  { id: 'Low Risk', label: { en: 'Low Risk', es: 'Riesgo Bajo' } },
+  { id: 'High Risk', label: { en: 'High Risk', es: 'Riesgo Alto' } },
+  { id: 'Very High Risk', label: { en: 'Very High Risk', es: 'Riesgo Muy Alto' } }
+];
+
+const GENDERS: { id: string, label: I18nString }[] = [
+  { id: 'Unknown', label: { en: 'Select', es: 'Seleccionar' } },
+  { id: 'Male', label: { en: 'Male', es: 'Masculino' } },
+  { id: 'Female', label: { en: 'Female', es: 'Femenino' } }
+];
+
+const TUBE_TYPES: { id: number, label: I18nString }[] = [
+  { id: 0, label: { en: '-- Select --', es: '-- Seleccionar --' } },
+  { id: 1, label: { en: 'Cuffed', es: 'Con Neumo' } },
+  { id: 2, label: { en: 'Uncuffed', es: 'Sin Neumo' } }
+];
+
+const PRIMARY_DIAGNOSES: { id: string, label: I18nString }[] = [
+  { id: 'asthma', label: { en: "Asthma", es: "Asma" } },
+  { id: 'bronchiolitis', label: { en: "Bronchiolitis", es: "Bronquiolitis" } },
+  { id: 'croup', label: { en: "Croup (laryngotracheitis)", es: "Crup (laringotraqueítis)" } },
+  { id: 'osa', label: { en: "Obstructive sleep apnea", es: "Apnea obstructiva del sueño" } },
+  { id: 'dka', label: { en: "Diabetic ketoacidosis", es: "Cetoacidosis diabética" } },
+  { id: 'seizure', label: { en: "Seizure disorders", es: "Trastornos convulsivos" } },
+  { id: 'hemorrhage', label: { en: "Spontaneous cerebral hemorrhage", es: "Hemorragia cerebral espontánea" } },
+  { id: 'cardiomyopathy', label: { en: "Cardiomyopathy or myocarditis", es: "Miocardiopatía o miocarditis" } },
+  { id: 'hlhs', label: { en: "Hypoplastic left heart syndrome (HLHS)", es: "Síndrome de corazón izquierdo hipoplásico" } },
+  { id: 'neuro', label: { en: "Neurodegenerative disorders", es: "Trastornos neurodegenerativos" } },
+  { id: 'nec', label: { en: "Necrotizing enterocolitis (NEC)", es: "Enterocolitis necrotizante" } },
+  { id: 'cardiac_arrest', label: { en: "Cardiac arrest before ICU admission", es: "Paro cardíaco antes del ingreso a UCI" } },
+  { id: 'scid', label: { en: "Severe combined immunodeficiency (SCID)", es: "Inmunodeficiencia combinada grave (IDCG)" } },
+  { id: 'leukemia', label: { en: "Post-induction leukemia/lymphoma", es: "Leucemia/linfoma post-inducción" } },
+  { id: 'bone_marrow', label: { en: "Bone marrow transplant recipient", es: "Receptor de trasplante de médula ósea" } },
+  { id: 'liver_failure', label: { en: "Severe liver failure", es: "Insuficiencia hepática grave" } },
+  { id: 'pneumonia', label: { en: "Pneumonia", es: "Neumonía" } },
+  { id: 'sepsis', label: { en: "Sepsis / Septic Shock", es: "Sepsis / Shock Séptico" } },
+  { id: 'tbi', label: { en: "Traumatic Brain Injury", es: "Traumatismo craneoencefálico" } },
+  { id: 'chd_other', label: { en: "Congenital Heart Disease (Other)", es: "Cardiopatía congénita (Otra)" } },
+  { id: 'rds', label: { en: "Respiratory distress syndrome", es: "Síndrome de distrés respiratorio" } },
+  { id: 'aki', label: { en: "Acute kidney injury", es: "Lesión renal aguda" } },
+  { id: 'meningitis', label: { en: "Meningitis / Encephalitis", es: "Meningitis / Encefalitis" } },
 ];
 
 export default function ClinicianFlow({ onComplete, onSave, onExit, state, editMrn }: ClinicianFlowProps) {
@@ -614,7 +652,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
               <FormField label={isEn ? "Country" : "País"}>
                 <select value={form.patient.country} onChange={e => handleCountryChange(e.target.value)} className="input">
                   <option value="">-- {isEn ? 'Select' : 'Seleccionar'} --</option>
-                  {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {COUNTRIES.map(c => <option key={c} value={c}>{getLocalizedLabel({ label: LOCALIZED_COUNTRIES[c] }, isEn)}</option>)}
                 </select>
               </FormField>
               <FormField label={isEn ? "City" : "Ciudad"}>
@@ -668,17 +706,15 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
             <FormField label={isEn ? "Date of Birth" : "Fecha de Nacimiento"}><input type="date" value={form.patient.birthDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, birthDate: e.target.value}}))} className="input" /></FormField>
             <FormField label={isEn ? "Gender" : "Género"}>
               <select value={form.patient.gender} onChange={e=>setForm(f=>({...f, patient: {...f.patient, gender: e.target.value}}))} className="input">
-                <option value="Unknown">{isEn ? 'Select' : 'Seleccionar'}</option>
-                <option value="Male">{isEn ? 'Male' : 'Masculino'}</option>
-                <option value="Female">{isEn ? 'Female' : 'Femenino'}</option>
+                {GENDERS.map(g => <option key={g.id} value={g.id}>{getLocalizedLabel(g, isEn)}</option>)}
               </select>
             </FormField>
             <FormField label={isEn ? "Weight (kg)" : "Peso (kg)"}><input type="number" min="0.5" step="0.1" value={form.outcome.weight||''} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, weight: Number(e.target.value)}}))} className="input" /></FormField>
             <FormField label={isEn ? "Primary Diagnosis" : "Diagnóstico Primario"}>
               <select value={form.outcome.diagnosis} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, diagnosis: e.target.value}}))} className="input">
                 <option value="">-- {isEn ? 'Select Diagnosis' : 'Seleccionar Diagnóstico'} --</option>
-                {PRIMARY_DIAGNOSES.sort().map(d => (
-                  <option key={d} value={d}>{d}</option>
+                {[...PRIMARY_DIAGNOSES].sort((a,b) => getLocalizedLabel(a, isEn).localeCompare(getLocalizedLabel(b, isEn))).map(d => (
+                  <option key={d.id} value={d.id}>{getLocalizedLabel(d, isEn)}</option>
                 ))}
               </select>
             </FormField>
@@ -728,7 +764,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                       >
                         <option value="">-- {isEn ? 'Select Indication' : 'Seleccionar Indicación'} --</option>
                         {INDICATIONS.map(i => (
-                          <option key={i.value} value={i.value}>{i.value} {i.desc ? `(${i.desc})` : ''}</option>
+                          <option key={i.value} value={i.value}>{getLocalizedLabel(i, isEn)} {getLocalizedDesc(i, isEn) ? `(${getLocalizedDesc(i, isEn)})` : ''}</option>
                         ))}
                       </select>
                     </FormField>
@@ -808,9 +844,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                         <FormField label={isEn ? "New Tube Size" : "Nuevo Tamaño Tubo"}><input type="number" step="0.5" value={form.outcome.newTubeSizeAccidental} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeSizeAccidental: Number(e.target.value)}}))} className="input bg-white" /></FormField>
                         <FormField label={isEn ? "Reintubation Tube Type" : "Tipo de Tubo Reintubación"}>
                           <select value={form.outcome.newTubeTypeAccidentalCuffed} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeTypeAccidentalCuffed: Number(e.target.value) as 0|1|2}}))} className="input bg-white">
-                            <option value={0}>-- {isEn ? 'Select' : 'Seleccionar'} --</option>
-                            <option value={1}>{isEn ? 'Cuffed' : 'Con Neumo'}</option>
-                            <option value={2}>{isEn ? 'Uncuffed' : 'Sin Neumo'}</option>
+                            {TUBE_TYPES.map(t => <option key={t.id} value={t.id}>{getLocalizedLabel(t, isEn)}</option>)}
                           </select>
                         </FormField>
                         <FormField label={isEn ? "CPR Required" : "Requirió RCP"}><BooleanToggle value={form.outcome.requiedCprPostAccidental} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, requiedCprPostAccidental: v}}))} isEn={isEn} /></FormField>
@@ -849,9 +883,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                         </FormField>
                         <FormField label={isEn ? "Elective Tube Type" : "Tipo de Tubo Electivo"}>
                           <select value={form.outcome.newTubeTypeElectiveCuffed} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, newTubeTypeElectiveCuffed: Number(e.target.value) as 0|1|2}}))} className="input bg-white">
-                            <option value={0}>-- {isEn ? 'Select' : 'Seleccionar'} --</option>
-                            <option value={1}>{isEn ? 'Cuffed' : 'Con Neumo'}</option>
-                            <option value={2}>{isEn ? 'Uncuffed' : 'Sin Neumo'}</option>
+                            {TUBE_TYPES.map(t => <option key={t.id} value={t.id}>{getLocalizedLabel(t, isEn)}</option>)}
                           </select>
                         </FormField>
                       </div>
@@ -958,10 +990,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                       className="input bg-white"
                     >
                       <option value="">-- {isEn ? 'Select Category' : 'Seleccionar Categoría'} --</option>
-                      <option value="None">{isEn ? 'None / Average Risk' : 'Ninguna / Riesgo Promedio'}</option>
-                      <option value="Low Risk">{isEn ? 'Low Risk' : 'Riesgo Bajo'}</option>
-                      <option value="High Risk">{isEn ? 'High Risk' : 'Riesgo Alto'}</option>
-                      <option value="Very High Risk">{isEn ? 'Very High Risk' : 'Riesgo Muy Alto'}</option>
+                      {RISK_CATEGORIES.map(rc => <option key={rc.id} value={rc.id}>{getLocalizedLabel(rc, isEn)}</option>)}
                     </select>
                   </FormField>
 
@@ -975,13 +1004,13 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                         >
                           <option value="">-- {isEn ? 'Select Subtype' : 'Seleccionar Subtipo'} --</option>
                           {RISK_SUBTYPES[form.outcome.riskCategory || '']?.map(s => (
-                            <option key={s.value} value={s.value}>{s.label}</option>
+                            <option key={s.value} value={s.value}>{getLocalizedLabel(s, isEn)}</option>
                           ))}
                         </select>
                       </FormField>
                       {form.outcome.riskSubtype && RISK_SUBTYPES[form.outcome.riskCategory || ''].find(s => s.value === form.outcome.riskSubtype)?.desc && (
                          <p className="mt-2 text-xs italic text-indigo-700">
-                           ({RISK_SUBTYPES[form.outcome.riskCategory || ''].find(s => s.value === form.outcome.riskSubtype)?.desc})
+                           ({getLocalizedDesc(RISK_SUBTYPES[form.outcome.riskCategory || ''].find(s => s.value === form.outcome.riskSubtype), isEn)})
                          </p>
                       )}
                     </div>
