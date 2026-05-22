@@ -669,18 +669,6 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
               </FormField>
             </div>
 
-            <div className="col-span-full grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              <FormField label={isEn ? "Hospital Patient ID" : "ID Paciente Hospital"}>
-                <input value={form.patient.identifier || ''} onChange={e => setForm(f=>({...f, patient: {...f.patient, identifier: e.target.value}}))} className="input" />
-              </FormField>
-              <FormField label={isEn ? "Admission Date" : "Fecha de Admisión"}>
-                <input type="date" value={form.patient.admissionDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, admissionDate: e.target.value}}))} className="input" />
-              </FormField>
-              <FormField label={isEn ? "Discharge Date" : "Fecha de Alta"}>
-                <input type="date" value={form.patient.dischargeDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, dischargeDate: e.target.value}}))} className="input" />
-              </FormField>
-            </div>
-
             <FormField label={isEn ? "Record Number" : "Número de Historia"}>
               <input 
                  value={form.patient.mrn} 
@@ -699,11 +687,22 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                        setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
                     }
                  }} 
-                 className="input" 
+                 className="input font-mono" 
               />
+            </FormField>
+            <FormField label={isEn ? "Admission Date" : "Fecha de Admisión"}>
+              <input type="date" value={form.patient.admissionDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, admissionDate: e.target.value}}))} className="input" />
+            </FormField>
+            <FormField label={isEn ? "Discharge Date" : "Fecha de Alta"}>
+              <input type="date" value={form.patient.dischargeDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, dischargeDate: e.target.value}}))} className="input" />
+            </FormField>
+
+            <FormField label={isEn ? "Hospital Patient ID" : "ID Paciente Hospital"}>
+              <input value={form.patient.identifier || ''} onChange={e => setForm(f=>({...f, patient: {...f.patient, identifier: e.target.value}}))} className="input" />
             </FormField>
             <FormField label={isEn ? "Full Name" : "Nombre Completo"}><input value={form.patient.name} onChange={e => setForm(f=>({...f, patient: {...f.patient, name: e.target.value}}))} className="input" /></FormField>
             <FormField label={isEn ? "Date of Birth" : "Fecha de Nacimiento"}><input type="date" value={form.patient.birthDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, birthDate: e.target.value}}))} className="input" /></FormField>
+
             <FormField label={isEn ? "Gender" : "Género"}>
               <select value={form.patient.gender} onChange={e=>setForm(f=>({...f, patient: {...f.patient, gender: e.target.value}}))} className="input">
                 {GENDERS.map(g => <option key={g.id} value={g.id}>{getLocalizedLabel(g, isEn)}</option>)}
