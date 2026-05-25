@@ -117,6 +117,17 @@ const TUBE_TYPES: { id: number, label: I18nString }[] = [
   { id: 2, label: { en: 'Uncuffed', es: 'Sin Neumo' } }
 ];
 
+const RESPIRATORY_MORTALITY_TYPES: { id: number, label: I18nString }[] = [
+  { id: 1, label: { en: '1 = Respiratory Infection (Pneumonia, Bronchiolitis)', es: '1 = Infección Respiratoria (Neumonía, Bronquiolitis)' } },
+  { id: 2, label: { en: '2 = ARDS (Acute Respiratory Distress Syndrome, Neonatal RDS/Hyaline membrane)', es: '2 = SDRA (ARDS, SDR Neonatal/Membrana hialina)' } },
+  { id: 3, label: { en: '3 = Respiratory Failure (Post-extubation RF, Acute BPD exacerbation)', es: '3 = Falla Respiratoria (IR post-extubación, DBP agudizada)' } },
+  { id: 4, label: { en: '4 = Airway Obstruction (Severe croup, Status asthmaticus)', es: '4 = Obstrucción Vía Aérea (Croup severo, Status asmático)' } },
+  { id: 5, label: { en: '5 = MV Complication (Reintubation failure, Pneumothorax, VAP)', es: '5 = Complicación VM (Falla reintubación, Neumotórax, NAVM/VAP)' } },
+  { id: 6, label: { en: '6 = Aspiration (Gastric/vomit aspiration, MAS/Meconium)', es: '6 = Aspiración (Aspiración gástrica/vómito, SAM/Meconio)' } },
+  { id: 7, label: { en: '7 = PPHN (Persistent pulmonary hypertension of the newborn)', es: '7 = HTPP (Hipertensión pulmonar persistente neonatal)' } },
+  { id: 8, label: { en: '8 = Other respiratory causes (Pulmonary hemorrhage, Alveolar bleeding)', es: '8 = Otras causas respiratorias (Hemorragia pulmonar, Sangrado alveolar)' } }
+];
+
 const PRIMARY_DIAGNOSES: { id: string, label: I18nString }[] = [
   { id: 'asthma', label: { en: "Asthma", es: "Asma" } },
   { id: 'bronchiolitis', label: { en: "Bronchiolitis", es: "Bronquiolitis" } },
@@ -164,7 +175,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
       electiveTubeChange: 0 as 0|1|2, newTubeSizeElective: 0, newTubeTypeElectiveCuffed: 0 as 0|1|2,
       electiveExtubation: 0 as 0|1|2, electiveExtubationDate: '', reintubationNeededPostElective: 0 as 0|1|2,
       failedExtubationAttempts: 0, successfulExtubationDate: '', tracheostomy: 0 as 0|1|2, tracheostomyDate: '',
-      status: '' as '' | 'Living' | 'Deceased', deceasedLessThan24h: 0 as 0|1|2, mortalityRespiratory: 0 as 0|1|2, ventilationDays: 0,
+      status: '' as '' | 'Living' | 'Deceased', deceasedLessThan24h: 0 as 0|1|2, mortalityRespiratory: 0 as 0|1|2, mortalityRespiratoryType: 0, ventilationDays: 0,
       pupils: 2 as 0|1|2, mechanicalVentilation: 0 as 0|1|2, systolicBP: '' as unknown as number, fiO2: '' as unknown as number, paO2: '' as unknown as number, baseExcess: '' as unknown as number,
       surgeryRecovery: 0 as 0|1, weightedDiagnosis: 'None', pim3LowRiskDiagnosis: 0 as 0|1|2,
       pim3HighRiskDiagnosis: 0 as 0|1|2, pim3VeryHighRiskDiagnosis: 0 as 0|1|2,
@@ -434,6 +445,9 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
   if (!form.outcome.status) missingFields.push({ label: isEn ? 'Vital Status Missing' : 'Estado Vital Faltante', sectionId: 'outcomes' });
   if (form.outcome.status === 'Deceased' && !form.outcome.deceasedLessThan24h) {
     missingFields.push({ label: isEn ? 'Death within 24h specification missing' : 'Especificación de muerte <24h faltante', sectionId: 'outcomes' });
+  }
+  if (form.outcome.mortalityRespiratory === 1 && !form.outcome.mortalityRespiratoryType) {
+    missingFields.push({ label: isEn ? 'Respiratory mortality type missing' : 'Tipo de causa respiratoria faltante', sectionId: 'outcomes' });
   }
 
   if (!form.caregiver.name) missingFields.push({ label: isEn ? 'Caregiver Name' : 'Nombre del Cuidador', sectionId: 'identification' });
@@ -1085,6 +1099,22 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                          <BooleanToggle value={form.outcome.mortalityRespiratory} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, mortalityRespiratory: v}}))} isEn={isEn} />
                        </FormField>
                      </div>
+                     {form.outcome.mortalityRespiratory === 1 && (
+                       <div className="col-span-full sm:col-span-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                         <FormField label={isEn ? "Type of respiratory cause" : "Tipo de causa respiratoria"}>
+                           <select 
+                             value={form.outcome.mortalityRespiratoryType || ''} 
+                             onChange={e => setForm(f=>({...f, outcome: {...f.outcome, mortalityRespiratoryType: Number(e.target.value)}}))}
+                             className="input"
+                           >
+                             <option value="">-- {isEn ? 'Select' : 'Seleccionar'} --</option>
+                             {RESPIRATORY_MORTALITY_TYPES.map(opt => (
+                               <option key={opt.id} value={opt.id}>{getLocalizedLabel(opt, isEn)}</option>
+                             ))}
+                           </select>
+                         </FormField>
+                       </div>
+                     )}
                    </>
                  )}
                </div>

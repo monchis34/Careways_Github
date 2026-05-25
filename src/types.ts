@@ -92,6 +92,7 @@ export interface Outcome {
   status: 'Living' | 'Deceased' | ''; // MORTALIDAD S/N
   deceasedLessThan24h?: boolean | 0 | 1 | 2;
   mortalityRespiratory?: boolean | 0 | 1 | 2; // MORT. CAUSAS RESPIRATORIA S/N
+  mortalityRespiratoryType?: number;
   ventilationDays: number;
   
   createdAt: string;
