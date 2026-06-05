@@ -37,6 +37,7 @@ export interface Outcome {
   gestationalAge?: number; // Neonatal specific
   
   // PIM3 Section - Database Key v2
+  pim3RecordDateTime?: string; // Capture time for 1 hour window check
   pupils: 0 | 1; // 0=Non-reactive, 1=Reactive (Simplified to 0/1 as per requirement)
   systolicBP: number;
   fiO2: number; // Percentage 21-100
@@ -44,7 +45,7 @@ export interface Outcome {
   baseExcess: number; // mmol/L
   electiveAdmission: boolean;
   mechanicalVentilation: boolean;
-  surgeryRecovery: 0 | 1; // 0=No, 1=Yes
+  surgeryRecovery: 0 | 1 | 2 | 3; // 0=No, 1=Non-cardiac, 2=Cardiac non-bypass, 3=Cardiac bypass
   
   // Risk Taxonomy / PIM3
   weightedDiagnosis: string;

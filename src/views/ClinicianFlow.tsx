@@ -157,6 +157,8 @@ const PRIMARY_DIAGNOSES: { id: string, label: I18nString }[] = [
 export default function ClinicianFlow({ onComplete, onSave, onExit, state, editMrn }: ClinicianFlowProps) {
   const { language } = useLanguage();
   const isEn = language === 'en';
+  const [fio2Warning, setFio2Warning] = useState<string | null>(null);
+  const [duplicateModal, setDuplicateModal] = useState<{mrn: string, count: number, records: Patient[]} | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [activeSection, setActiveSection] = useState('identification');
   const [successData, setSuccessData] = useState<{pat: Patient, out: Outcome, par: ParentPatient} | null>(null);
@@ -165,7 +167,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     patient: {
       identifier: '', name: '', mrn: '', type: 'Pediatric' as PatientType,
       gender: 'Unknown', hospital: '', city: '', country: '',
-      birthDate: '', admissionDate: format(new Date(), 'yyyy-MM-dd'), dischargeDate: format(new Date(), 'yyyy-MM-dd'),
+      birthDate: '', admissionDate: format(new Date(), "yyyy-MM-dd'T'HH:mm"), dischargeDate: format(new Date(), 'yyyy-MM-dd'),
       patientHash: ''
     },
     outcome: {
@@ -177,7 +179,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
       failedExtubationAttempts: 0, successfulExtubationDate: '', tracheostomy: 0 as 0|1|2, tracheostomyDate: '',
       status: '' as '' | 'Living' | 'Deceased', deceasedLessThan24h: 0 as 0|1|2, mortalityRespiratory: 0 as 0|1|2, mortalityRespiratoryType: 0, ventilationDays: 0,
       pupils: 2 as 0|1|2, mechanicalVentilation: 0 as 0|1|2, systolicBP: '' as unknown as number, fiO2: '' as unknown as number, paO2: '' as unknown as number, baseExcess: '' as unknown as number,
-      surgeryRecovery: 0 as 0|1, weightedDiagnosis: 'None', pim3LowRiskDiagnosis: 0 as 0|1|2,
+      surgeryRecovery: 0 as 0|1|2|3, weightedDiagnosis: 'None', pim3LowRiskDiagnosis: 0 as 0|1|2,
       pim3HighRiskDiagnosis: 0 as 0|1|2, pim3VeryHighRiskDiagnosis: 0 as 0|1|2,
       riskCategory: '' as '' | 'Low Risk' | 'High Risk' | 'Very High Risk' | 'None',
       riskSubtype: '',
@@ -274,38 +276,47 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     if (form.outcome.systolicBP === '' || Number(form.outcome.systolicBP) < 0 || Number(form.outcome.systolicBP) > 300) missing.push(isEn ? 'Systolic BP (0-300)' : 'PAS (0-300)');
     if (form.outcome.baseExcess === '') missing.push(isEn ? 'Base Excess' : 'Exceso Base');
     if (form.outcome.paO2 === '' || Number(form.outcome.paO2) < 0) missing.push(isEn ? 'PaO2' : 'PaO2');
-    if (form.outcome.fiO2 === '' || Number(form.outcome.fiO2) < 21 || Number(form.outcome.fiO2) > 100) missing.push(isEn ? 'FiO2 (21-100)' : 'FiO2 (21-100)');
+    if (form.outcome.fiO2 === '' || Number(form.outcome.fiO2) < 0.21 || Number(form.outcome.fiO2) > 1) missing.push(isEn ? 'FiO2 (0.21-1.0)' : 'FiO2 (0.21-1.0)');
     if (!form.outcome.riskCategory) missing.push(isEn ? 'Risk Diagnosis Category' : 'Categoría de Diagnóstico de Riesgo');
+
+    if (!form.outcome.pim3RecordDateTime || !form.patient.admissionDate || !form.patient.admissionDate.includes('T')) {
+       missing.push(isEn ? 'Missing valid timestamp for measurements vs admission' : 'Falta hora válida de medición vs ingreso UCI');
+    } else {
+       const diff = (new Date(form.outcome.pim3RecordDateTime).getTime() - new Date(form.patient.admissionDate).getTime()) / 60000;
+       if (diff > 60) {
+          missing.push(isEn ? `Measurements outside 1hr window (${Math.round(diff)} mins)` : `Medidas fuera de ventana de 1hr (${Math.round(diff)} mins)`);
+       }
+    }
 
     if (missing.length > 0) return { error: true, missing };
 
-    // Official PIM3 formulation
-    let score = -4.8829;
-    if (form.outcome.pupils === 0) score += 1.6677; // Fixed pupils
-    if (form.outcome.electiveAdmission === 1) score -= 1.3980;
-    if (form.outcome.mechanicalVentilation === 1 || form.outcome.intubated === 1) score += 0.5192;
-    if (form.outcome.surgeryRecovery === 1) score -= 0.8876;
+    // Official PIM3 formulation from medcalc.com
+    let score = -1.7928;
+    if (form.outcome.pupils === 0) score += 3.8233; // Fixed pupils
+    if (form.outcome.electiveAdmission === 1) score -= 0.5378;
+    if (form.outcome.mechanicalVentilation === 1 || form.outcome.intubated === 1) score += 0.9763;
     
-    if (form.outcome.pim3LowRiskDiagnosis === 1 || form.outcome.riskCategory === 'Low Risk') score -= 1.0506;
-    if (form.outcome.pim3HighRiskDiagnosis === 1 || form.outcome.riskCategory === 'High Risk') score += 1.3787;
-    if (form.outcome.pim3VeryHighRiskDiagnosis === 1 || form.outcome.riskCategory === 'Very High Risk') score += 2.5979;
-
-    const sbp = Number(form.outcome.systolicBP);
-    if (!isNaN(sbp) && sbp >= 0) {
-      score += (Math.abs(sbp - 120) * 0.01395);
-    }
     const be = Number(form.outcome.baseExcess);
-    if (!isNaN(be)) {
-      score += (Math.abs(be) * 0.104);
+    score += (Math.abs(be) * 0.0671);
+    
+    const sbp = Number(form.outcome.systolicBP);
+    score += (sbp * -0.0431);
+    score += ((sbp * sbp) * 0.0001);
+    
+    const pao2 = Number(form.outcome.paO2);
+    const fio2 = Number(form.outcome.fiO2); // Fraction 0.21-1.0
+    if (pao2 > 0) {
+      score += (100 * (fio2 / pao2)) * 0.1716;
     }
 
-    const pao2 = Number(form.outcome.paO2) || 1;
-    const fio2 = Number(form.outcome.fiO2) || 21;
-    const isVentilated = form.outcome.mechanicalVentilation === 1 || form.outcome.intubated === 1;
-    if (isVentilated) {
-      const pao2fio2 = (100 * pao2 / fio2);
-      score += Math.abs((pao2fio2) - 250) * 0.0071; // Non-linear component representation
-    }
+    const surg = form.outcome.surgeryRecovery;
+    if (surg === 1) score -= 1.5164; // Non-cardiac
+    else if (surg === 2) score -= 0.8762; // Non-bypass cardiac
+    else if (surg === 3) score -= 1.2246; // Bypass cardiac
+
+    if (form.outcome.riskCategory === 'Very High Risk') score += 1.6225;
+    else if (form.outcome.riskCategory === 'High Risk') score += 1.0725;
+    else if (form.outcome.riskCategory === 'Low Risk') score -= 2.1766;
 
     const prob = Math.exp(score) / (1 + Math.exp(score));
     return { error: false, score: score.toFixed(2), prob: (prob * 100).toFixed(2) };
@@ -705,24 +716,33 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                  value={form.patient.mrn} 
                  onChange={e => {
                     const val = e.target.value;
+                    setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
+                 }} 
+                 onBlur={e => {
+                    const val = e.target.value;
+                    if (!val) return;
+                    // Check local storage draft
                     const saved = localStorage.getItem(`autosave_draft_${val}`);
                     if (saved) {
                        try {
                          const parsed = JSON.parse(saved);
                          if (parsed.form) setForm({...parsed.form, patient: {...parsed.form.patient, mrn: val}});
                          if (parsed.activeSection) setActiveSection(parsed.activeSection);
-                       } catch (e) {
-                         setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
-                       }
-                    } else {
-                       setForm(f=>({...f, patient: {...f.patient, mrn: val}}));
+                       } catch (err) {}
                     }
-                 }} 
+                    // Check previous matching admissions via state
+                    if (state?.patients) {
+                       const previous = state.patients.filter(p => p.mrn === val);
+                       if (previous.length > 0) {
+                          setDuplicateModal({ mrn: val, count: previous.length, records: previous });
+                       }
+                    }
+                 }}
                  className="input font-mono" 
               />
             </FormField>
-            <FormField label={isEn ? "Admission Date" : "Fecha de Admisión"}>
-              <input type="date" value={form.patient.admissionDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, admissionDate: e.target.value}}))} className="input" />
+            <FormField label={isEn ? "ICU Admission Date/Time" : "Fecha/Hora de Admisión UCI"}>
+              <input type="datetime-local" value={form.patient.admissionDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, admissionDate: e.target.value}}))} className="input" />
             </FormField>
             <FormField label={isEn ? "Discharge Date" : "Fecha de Alta"}>
               <input type="date" value={form.patient.dischargeDate} onChange={e => setForm(f=>({...f, patient: {...f.patient, dischargeDate: e.target.value}}))} className="input" />
@@ -1017,9 +1037,35 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
           )}
 
           <Section id="pim3" title={isEn ? 'First ICU Hour / PIM3' : 'Primera Hora UCI / PIM3'}>
-            <p className="col-span-full text-sm text-gray-500 mb-2 italic">
+            <p className="col-span-full text-sm text-gray-500 mb-4 italic">
                {isEn ? 'Measurements MUST correspond to the first hour of ICU admission for accurate severity scoring.' : 'Las mediciones DEBEN corresponder a la primera hora tras el ingreso a la UCI.'}
             </p>
+            <div className="col-span-full mb-4">
+              <FormField label={isEn ? "Time of Physiological Measurements" : "Hora de Mediciones Fisiológicas"}>
+                <input 
+                  type="datetime-local" 
+                  value={form.outcome.pim3RecordDateTime || ''} 
+                  onChange={e => setForm(f=>({...f, outcome: {...f.outcome, pim3RecordDateTime: e.target.value}}))} 
+                  className="input max-w-sm" 
+                />
+              </FormField>
+              {form.outcome.pim3RecordDateTime && form.patient.admissionDate && form.patient.admissionDate.includes('T') ? (
+                (() => {
+                  const pTime = new Date(form.outcome.pim3RecordDateTime).getTime();
+                  const aTime = new Date(form.patient.admissionDate).getTime();
+                  const diffMin = (pTime - aTime) / 60000;
+                  if (diffMin > 60) {
+                    return <p className="text-sm font-bold text-rose-600 mt-2">❌ {isEn ? `Measurements taken > 1 hour (${Math.round(diffMin)} mins) after admission. Invalid for PIM3.` : `Mediciones tomadas > 1 hora (${Math.round(diffMin)} mins) del ingreso. Inválido para PIM3.`}</p>;
+                  }
+                  if (diffMin < 0) {
+                    return <p className="text-sm font-bold text-amber-600 mt-2">⚠️ {isEn ? `Measurements time is before admission time.` : `Mediciones registradas antes de la admisión.`}</p>;
+                  }
+                  return <p className="text-sm font-bold text-emerald-600 mt-2">✅ {isEn ? `Measurements within 1-hour window (${Math.round(diffMin)} mins).` : `Mediciones dentro de la 1ra hora (${Math.round(diffMin)} mins).`}</p>;
+                })()
+              ) : (
+                <p className="text-xs text-amber-600 mt-1 mt-2 font-medium">⚠️ {isEn ? 'Missing admission timestamp or measurement timestamp.' : 'Falta hora de admisión o fecha de medición para verificar la ventana.'}</p>
+              )}
+            </div>
             <FormField label={isEn ? "Pupil Reactivity" : "Reactividad Pupilar"} tooltip={isEn ? "Record the FIRST measurement within the first hour of ICU admission. DO NOT mark abnormal if caused by drugs, toxins or local eye injury." : "Registre la PRIMERA medición dentro de la primera hora de admisión UCI. NO marcar anormal si es causado por medicamentos, toxinas o lesión ocular local."}>
                <BooleanToggle value={form.outcome.pupils} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, pupils: v}}))} yesLabel={isEn?'Reactive':'Reactivas'} noLabel={isEn?'Fixed / Non-reactive':'Fijas / No Reactivas'} />
             </FormField>
@@ -1027,10 +1073,50 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                <BooleanToggle value={form.outcome.mechanicalVentilation} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, mechanicalVentilation: v}}))} isEn={isEn} />
             </FormField>
             <FormField label={isEn ? "Recovery from Surgery" : "Recuperación Post-Quirúrgica"} tooltip={isEn ? "0=No surgery recovery, 1=Non-cardiac procedure recovery, 2=Cardiac recovery without bypass, 3=Cardiac recovery WITH bypass" : "0=Sin recuperación de cirugía, 1=Recuperación procedimiento no cardíaco, 2=Recuperación cardíaca sin bypass, 3=Recuperación cardíaca CON bypass"}>
-               <BooleanToggle value={form.outcome.surgeryRecovery} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, surgeryRecovery: v}}))} isEn={isEn} />
+               <select 
+                 value={form.outcome.surgeryRecovery}
+                 onChange={e => setForm(f=>({...f, outcome: {...f.outcome, surgeryRecovery: Number(e.target.value) as any}}))}
+                 className="input bg-white"
+               >
+                  <option value={0}>{isEn ? '0 = No recovery from surgery/procedure' : '0 = Sin recuperación de cirugía/procedimiento'}</option>
+                  <option value={1}>{isEn ? '1 = Recovery from non-cardiac procedure' : '1 = Recuperación de procedimiento no cardíaco'}</option>
+                  <option value={2}>{isEn ? '2 = Recovery from non-bypass cardiac procedure' : '2 = Recuperación de procedimiento cardíaco sin bypass'}</option>
+                  <option value={3}>{isEn ? '3 = Recovery from bypass cardiac procedure' : '3 = Recuperación de procedimiento cardíaco CON bypass'}</option>
+               </select>
             </FormField>
             <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"} tooltip={isEn ? "Use the FIRST recorded value (first ICU hour). Record 0 if cardiac arrest, 30 if shock with unmeasurable BP. Prefer arterial line if available." : "Use el PRIMER valor registrado (primera hora UCI). Registre 0 si paro cardíaco, 30 si shock con PA no medible. Preferir línea arterial si disponible."}><input type="number" min="0" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="FiO2 (21-100)" tooltip={isEn ? "Use the value corresponding to when PaO2 was taken. For spontaneous breathing record 21%." : "Use el valor correspondiente al momento de la toma de PaO2. Para respiración espontánea registrar 21%."}><input type="number" min="21" max="100" value={form.outcome.fiO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, fiO2: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label="FiO2 (0.21-1.0)" tooltip={isEn ? "Fraction (e.g. 0.21). If > 21 entered, it auto-converts to fraction." : "Fracción (ej. 0.21). Si ingresa > 21, se convierte automáticamente a fracción."}>
+               <div>
+                 <input 
+                   type="number" 
+                   step="0.01" 
+                   value={form.outcome.fiO2 || ''} 
+                   onChange={e => {
+                     let val = e.target.value;
+                     if (val === '') {
+                       setForm(f=>({...f, outcome: {...f.outcome, fiO2: '' as any}}));
+                       setFio2Warning(null);
+                       return;
+                     }
+                     let num = Number(val);
+                     if (num >= 21 && num <= 100) {
+                       const converted = num / 100;
+                       setFio2Warning(isEn ? `⚠️ FiO2 auto-converted from ${num}% to ${converted}. Verify.` : `⚠️ FiO2 convertido de ${num}% a ${converted}. Verifique.`);
+                       num = converted;
+                     } else if (num > 100 || num < 0.21) {
+                        setFio2Warning(isEn ? `❌ Invalid value (${num}). Must be 0.21-1.0` : `❌ Valor inválido (${num}). Debe ser 0.21-1.0`);
+                        setForm(f=>({...f, outcome: {...f.outcome, fiO2: '' as any}}));
+                        return;
+                     } else {
+                       setFio2Warning(null); 
+                     }
+                     setForm(f=>({...f, outcome: {...f.outcome, fiO2: num}}));
+                   }} 
+                   className="input" 
+                 />
+                 {fio2Warning && <p className="text-xs text-amber-600 font-bold mt-1">{fio2Warning}</p>}
+               </div>
+            </FormField>
             <FormField label="PaO2 (mmHg)" tooltip={isEn ? "Use value from the FIRST hour of ICU admission. Must correspond to the SAME time as FiO2. Acceptable: 80-100 mmHg in room air." : "Usar valor de la PRIMERA hora de admisión UCI. Debe corresponder al mismo momento que FiO2. Valores aceptables: 80-100 mmHg en aire ambiente."}><input type="number" min="0" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
             <FormField label={isEn ? "Base Excess" : "Exceso de Base"} tooltip={isEn ? "Only arterial or capillary values. Can be negative. Range: -30 to +30 mmol/L." : "Solo valores arteriales o capilares. Puede ser negativo. Rango: -30 a +30 mmol/L."}><input type="number" step="0.1" value={form.outcome.baseExcess || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, baseExcess: Number(e.target.value)}}))} className="input" /></FormField>
           </Section>
@@ -1377,6 +1463,49 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                  </ul>
               </div>
 
+           </div>
+        </div>
+      )}
+
+      {duplicateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+           <div className="bg-white rounded-3xl p-8 max-w-lg w-full shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+             <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center">
+                   <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-gray-900">{isEn ? 'History Found' : 'Historial Encontrado'}</h3>
+                  <p className="text-sm text-gray-500 font-medium">MRN: {duplicateModal.mrn}</p>
+                </div>
+             </div>
+             
+             <p className="text-gray-600 mb-6 font-medium">
+               {isEn ? `This patient has ${duplicateModal.count} previous admission(s) on record.` : `Este paciente tiene ${duplicateModal.count} admisión(es) previa(s) registrada(s).`}
+               <br/><br/>
+               {isEn ? 'The MRN is a unique identifier. You can create a new admission for this encounter (PIM3 must be recalculated), or view the read-only history.' : 'El MRN es un identificador único. Puede crear una nueva admisión para este ingreso (PIM3 se recalculará), o consultar el historial de lectura.'}
+             </p>
+
+             <div className="flex flex-col gap-3">
+               <button 
+                 onClick={() => {
+                   setDuplicateModal(null);
+                   // Pre-fill some demographics from history if we wanted, for now just dismiss
+                 }} 
+                 className="w-full py-4 bg-[#204071] text-white rounded-xl font-bold hover:bg-blue-900 transition-colors"
+               >
+                 {isEn ? 'Create NEW Admission (Current)' : 'Crear NUEVA Admisión (Actual)'}
+               </button>
+               <button 
+                 onClick={() => {
+                   setDuplicateModal(null);
+                   onExit(); // For now, just exit to main screen where they can see history
+                 }} 
+                 className="w-full py-4 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition-colors"
+               >
+                 {isEn ? 'Cancel / View History' : 'Cancelar / Ver Historial'}
+               </button>
+             </div>
            </div>
         </div>
       )}
