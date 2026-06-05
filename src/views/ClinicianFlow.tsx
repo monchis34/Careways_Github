@@ -266,12 +266,19 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     return isCuffed ? (y / 4) + 3.5 : (y / 4) + 4;
   }, [age.rawYears, form.outcome.ettCuffed]);
 
-  const ettAdequate = Math.abs(form.outcome.ettSize - expectedSize) <= 0.5;
+  const ettAdequate = age.rawYears > 0 ? (Math.abs(form.outcome.ettSize - expectedSize) <= 0.5) : false;
 
   const calculatedPIM3 = useMemo(() => {
-    if (form.outcome.systolicBP === '' || form.outcome.baseExcess === '' || form.outcome.paO2 === '' || form.outcome.fiO2 === '') {
-      return null;
-    }
+    const missing: string[] = [];
+    if (form.outcome.pupils === 2) missing.push(isEn ? 'Pupil Reactivity missing' : 'Reactividad Pupilar faltante');
+    if (form.outcome.systolicBP === '' || Number(form.outcome.systolicBP) < 0 || Number(form.outcome.systolicBP) > 300) missing.push(isEn ? 'Systolic BP (0-300)' : 'PAS (0-300)');
+    if (form.outcome.baseExcess === '') missing.push(isEn ? 'Base Excess' : 'Exceso Base');
+    if (form.outcome.paO2 === '' || Number(form.outcome.paO2) < 0) missing.push(isEn ? 'PaO2' : 'PaO2');
+    if (form.outcome.fiO2 === '' || Number(form.outcome.fiO2) < 21 || Number(form.outcome.fiO2) > 100) missing.push(isEn ? 'FiO2 (21-100)' : 'FiO2 (21-100)');
+    if (!form.outcome.riskCategory) missing.push(isEn ? 'Risk Diagnosis Category' : 'Categoría de Diagnóstico de Riesgo');
+
+    if (missing.length > 0) return { error: true, missing };
+
     // Official PIM3 formulation
     let score = -4.8829;
     if (form.outcome.pupils === 0) score += 1.6677; // Fixed pupils
@@ -301,8 +308,8 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     }
 
     const prob = Math.exp(score) / (1 + Math.exp(score));
-    return { score: score.toFixed(2), prob: (prob * 100).toFixed(2) };
-  }, [form.outcome]);
+    return { error: false, score: score.toFixed(2), prob: (prob * 100).toFixed(2) };
+  }, [form.outcome, isEn]);
 
   const [editLogs, setEditLogs] = useState<{name: string, role: string, action: string, time: string}[]>([]);
 
@@ -328,9 +335,19 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
   if (!form.patient.name) missingFields.push({ label: isEn ? 'Name missing' : 'Nombre faltante', sectionId: 'identification' });
   if (!form.patient.birthDate) missingFields.push({ label: isEn ? 'DOB missing' : 'Fecha de nacimiento', sectionId: 'identification' });
   
+  if (age.rawYears < 0) {
+     missingFields.push({ label: isEn ? 'Error: Check dates - calculated age is negative' : 'Error: Verificar fechas - edad calculada es negativa', sectionId: 'identification' });
+  }
+
   if (form.patient.admissionDate && form.patient.dischargeDate) {
     if (parseISO(form.patient.dischargeDate) < parseISO(form.patient.admissionDate)) {
-      missingFields.push({ label: isEn ? 'Discharge date cannot be before admission date' : 'La fecha de alta no puede ser anterior a la admisión', sectionId: 'identification' });
+      missingFields.push({ label: isEn ? 'Error: Admission date is after discharge date' : 'Error: Fecha de admisión posterior a fecha de alta', sectionId: 'identification' });
+    }
+  }
+
+  if (form.outcome.intubated === 1 && form.outcome.intubationDateTime) {
+    if (form.patient.birthDate && parseISO(form.patient.birthDate) > parseISO(form.outcome.intubationDateTime)) {
+      missingFields.push({ label: isEn ? 'Error: Birth date is after intubation date' : 'Error: Fecha de nacimiento posterior a fecha de intubación', sectionId: 'identification' });
     }
   }
   if (form.outcome.weight < 0.5 || form.outcome.weight > 150) missingFields.push({ label: isEn ? 'Invalid Weight' : 'Peso inválido', sectionId: 'identification' });
@@ -406,12 +423,12 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
       const trachDtObj = parseISO(form.outcome.tracheostomyDate);
       if (form.outcome.intubationDateTime) {
          if (trachDtObj < parseISO(form.outcome.intubationDateTime)) {
-           missingFields.push({ label: isEn ? 'Procedure date cannot be earlier than intubation' : 'La fecha del procedimiento no puede ser anterior a la intubación', sectionId: 'events' });
+           missingFields.push({ label: isEn ? 'Error: Tracheostomy date is earlier than intubation date' : 'Error: Fecha de traqueostomía anterior a fecha de intubación', sectionId: 'events' });
          }
       }
       if (form.patient.dischargeDate) {
          if (trachDtObj > parseISO(form.patient.dischargeDate)) {
-           missingFields.push({ label: isEn ? 'Procedure date cannot be after discharge' : 'La fecha del procedimiento no puede ser posterior al alta', sectionId: 'events' });
+           missingFields.push({ label: isEn ? 'Error: Tracheostomy date cannot be after discharge date' : 'Error: La fecha de traqueostomía no puede ser posterior al alta', sectionId: 'events' });
          }
       }
     }
@@ -437,7 +454,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
       missingFields.push({ label: isEn ? 'Successful extubation date missing' : 'Fecha de extubación exitosa faltante', sectionId: 'events' });
     } else if (form.outcome.intubationDateTime) {
       if (parseISO(form.outcome.successfulExtubationDate) < parseISO(form.outcome.intubationDateTime)) {
-         missingFields.push({ label: isEn ? 'Extubation date cannot be earlier than intubation' : 'La fecha de extubación no puede ser anterior a la intubación', sectionId: 'events' });
+         missingFields.push({ label: isEn ? 'Error: Extubation date is earlier than intubation date' : 'Error: Fecha de extubación anterior a fecha de intubación', sectionId: 'events' });
       }
     }
   }
@@ -794,7 +811,7 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                       <input type="datetime-local" value={form.outcome.intubationDateTime} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, intubationDateTime: e.target.value}}))} className="input bg-white" />
                     </FormField>
                     
-                    <FormField label={isEn ? "Elective ICU Admission?" : "¿Admisión Electiva en UCI?"}>
+                    <FormField label={isEn ? "Elective ICU Admission?" : "¿Admisión Electiva en UCI?"} tooltip={isEn ? "Scheduled or predictable admission following elective surgery, procedure, or monitoring. Elective if it CAN be delayed >6 hours without adverse effect." : "Admisión programada o previsible tras cirugía electiva, procedimiento electivo, monitoreo electivo. Es electiva si PUEDE posponerse >6 horas sin efecto adverso."}>
                        <BooleanToggle value={form.outcome.electiveAdmission} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, electiveAdmission: v}}))} isEn={isEn} />
                     </FormField>
 
@@ -818,15 +835,24 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                           </div>
                           <div>
                             <p className="text-xs text-blue-300 uppercase tracking-wider mb-1 font-bold">{isEn ? 'Expected Size' : 'Tamaño Esperado'}</p>
-                            <p className="text-2xl font-black">{expectedSize.toFixed(1)} <span className="text-sm">mm</span></p>
+                            {age.rawYears > 0 ? (
+                              <p className="text-2xl font-black">{expectedSize.toFixed(1)} <span className="text-sm">mm</span></p>
+                            ) : (
+                              <p className="text-xs text-amber-300 flex items-center gap-1 mt-2 font-bold leading-tight">
+                                <AlertTriangle className="w-3 h-3 flex-shrink-0" /> {isEn ? 'Unavailable: Missing valid age' : 'No disponible: Falta edad válida'}
+                              </p>
+                            )}
                           </div>
                           <div className="col-span-2 pt-4 border-t border-blue-800">
                              <div className="flex items-center justify-between">
                                <p className="text-xs text-blue-300 uppercase tracking-wider font-bold">{isEn ? 'Clinical Assessment' : 'Evaluación Clínica'}</p>
-                               {ettAdequate ? 
-                                  <span className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> {isEn?'Adequate':'Adecuado'}</span> : 
-                                  <span className="bg-rose-500/20 text-rose-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> {isEn?'Suboptimal':'Subóptimo'}</span>
-                               }
+                               {age.rawYears > 0 ? (
+                                  ettAdequate ? 
+                                    <span className="bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3"/> {isEn?'Adequate':'Adecuado'}</span> : 
+                                    <span className="bg-rose-500/20 text-rose-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> {isEn?'Suboptimal':'Subóptimo'}</span>
+                               ) : (
+                                  <span className="bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> {isEn?'N/A':'N/A'}</span>
+                               )}
                              </div>
                           </div>
                         </div>
@@ -962,10 +988,26 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                           <input type="date" value={form.outcome.tracheostomyDate || ''} onChange={e => setForm(f=>({...f, outcome: {...f.outcome, tracheostomyDate: e.target.value}}))} className="input bg-white" />
                         </FormField>
                         <FormField label={isEn ? "Days from Intubation (Calculated)" : "Días desde Intubación (Calculado)"}>
-                          <input type="text" readOnly className="input bg-purple-100/50 text-purple-900 font-bold border-purple-200" value={
-                             (form.outcome.intubationDateTime && form.outcome.tracheostomyDate && isValid(parseISO(form.outcome.intubationDateTime)) && isValid(parseISO(form.outcome.tracheostomyDate))) ? 
-                             Math.max(0, differenceInDays(parseISO(form.outcome.tracheostomyDate), parseISO(form.outcome.intubationDateTime))) + ' days' : '---'
-                          } />
+                           {(() => {
+                             if (!form.outcome.intubationDateTime || !form.outcome.tracheostomyDate || !isValid(parseISO(form.outcome.intubationDateTime)) || !isValid(parseISO(form.outcome.tracheostomyDate))) {
+                               return (
+                                 <div className="flex border border-amber-200 bg-amber-50 p-2 rounded-xl text-amber-800 text-xs items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span>{isEn ? "Cálculo no disponible: Missing valid dates" : "Cálculo no disponible: Faltan fechas válidas"}</span>
+                                 </div>
+                               );
+                             }
+                             const days = differenceInDays(parseISO(form.outcome.tracheostomyDate), parseISO(form.outcome.intubationDateTime));
+                             if (days < 0) {
+                               return (
+                                 <div className="flex border border-rose-200 bg-rose-50 p-2 rounded-xl text-rose-800 text-xs items-center gap-2">
+                                    <AlertTriangle className="w-4 h-4" />
+                                    <span>{isEn ? "Cálculo no disponible: Negative days calculated" : "Cálculo no disponible: Días negativos calculados"}</span>
+                                 </div>
+                               );
+                             }
+                             return <input type="text" readOnly className="input bg-purple-100/50 text-purple-900 font-bold border-purple-200" value={`${days} days`} />;
+                           })()}
                         </FormField>
                       </div>
                     )}
@@ -978,25 +1020,25 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
             <p className="col-span-full text-sm text-gray-500 mb-2 italic">
                {isEn ? 'Measurements MUST correspond to the first hour of ICU admission for accurate severity scoring.' : 'Las mediciones DEBEN corresponder a la primera hora tras el ingreso a la UCI.'}
             </p>
-            <FormField label={isEn ? "Pupil Reactivity" : "Reactividad Pupilar"}>
+            <FormField label={isEn ? "Pupil Reactivity" : "Reactividad Pupilar"} tooltip={isEn ? "Record the FIRST measurement within the first hour of ICU admission. DO NOT mark abnormal if caused by drugs, toxins or local eye injury." : "Registre la PRIMERA medición dentro de la primera hora de admisión UCI. NO marcar anormal si es causado por medicamentos, toxinas o lesión ocular local."}>
                <BooleanToggle value={form.outcome.pupils} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, pupils: v}}))} yesLabel={isEn?'Reactive':'Reactivas'} noLabel={isEn?'Fixed / Non-reactive':'Fijas / No Reactivas'} />
             </FormField>
-            <FormField label={isEn ? "Mechanical Ventilation" : "Ventilación Mecánica"}>
+            <FormField label={isEn ? "Mechanical Ventilation" : "Ventilación Mecánica"} tooltip={isEn ? "Includes invasive ventilation, CPAP/BiPAP with mask, or negative pressure ventilation. Do NOT include tracheostomy with spontaneous breathing or T-Bar." : "Incluye ventilación invasiva, CPAP/BiPAP con máscara, o ventilación con presión negativa. NO incluir traqueostomía con respiración espontánea ni T-Bar sin ventilador."}>
                <BooleanToggle value={form.outcome.mechanicalVentilation} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, mechanicalVentilation: v}}))} isEn={isEn} />
             </FormField>
-            <FormField label={isEn ? "Recovery from Surgery" : "Recuperación Post-Quirúrgica"}>
+            <FormField label={isEn ? "Recovery from Surgery" : "Recuperación Post-Quirúrgica"} tooltip={isEn ? "0=No surgery recovery, 1=Non-cardiac procedure recovery, 2=Cardiac recovery without bypass, 3=Cardiac recovery WITH bypass" : "0=Sin recuperación de cirugía, 1=Recuperación procedimiento no cardíaco, 2=Recuperación cardíaca sin bypass, 3=Recuperación cardíaca CON bypass"}>
                <BooleanToggle value={form.outcome.surgeryRecovery} onChange={(v:any) => setForm(f=>({...f, outcome: {...f.outcome, surgeryRecovery: v}}))} isEn={isEn} />
             </FormField>
-            <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"}><input type="number" min="0" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="FiO2 (21-100)"><input type="number" min="21" max="100" value={form.outcome.fiO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, fiO2: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="PaO2 (mmHg)"><input type="number" min="0" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label={isEn ? "Base Excess" : "Exceso de Base"}><input type="number" step="0.1" value={form.outcome.baseExcess || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, baseExcess: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"} tooltip={isEn ? "Use the FIRST recorded value (first ICU hour). Record 0 if cardiac arrest, 30 if shock with unmeasurable BP. Prefer arterial line if available." : "Use el PRIMER valor registrado (primera hora UCI). Registre 0 si paro cardíaco, 30 si shock con PA no medible. Preferir línea arterial si disponible."}><input type="number" min="0" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label="FiO2 (21-100)" tooltip={isEn ? "Use the value corresponding to when PaO2 was taken. For spontaneous breathing record 21%." : "Use el valor correspondiente al momento de la toma de PaO2. Para respiración espontánea registrar 21%."}><input type="number" min="21" max="100" value={form.outcome.fiO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, fiO2: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label="PaO2 (mmHg)" tooltip={isEn ? "Use value from the FIRST hour of ICU admission. Must correspond to the SAME time as FiO2. Acceptable: 80-100 mmHg in room air." : "Usar valor de la PRIMERA hora de admisión UCI. Debe corresponder al mismo momento que FiO2. Valores aceptables: 80-100 mmHg en aire ambiente."}><input type="number" min="0" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
+            <FormField label={isEn ? "Base Excess" : "Exceso de Base"} tooltip={isEn ? "Only arterial or capillary values. Can be negative. Range: -30 to +30 mmol/L." : "Solo valores arteriales o capilares. Puede ser negativo. Rango: -30 a +30 mmol/L."}><input type="number" step="0.1" value={form.outcome.baseExcess || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, baseExcess: Number(e.target.value)}}))} className="input" /></FormField>
           </Section>
           
           <Section id="risk" title={isEn ? 'Risk Stratification' : 'Estratificación de Riesgo'}>
              <div className="col-span-full bg-indigo-50 border border-indigo-100 p-6 rounded-2xl mb-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <FormField label={isEn ? "Risk Category" : "Categoría de Riesgo"}>
+                  <FormField label={isEn ? "Risk Category" : "Categoría de Riesgo"} tooltip={isEn ? "Only ONE category. The HIGHEST risk takes precedence. Low: Asthma, Bronchiolitis, Croup, OSA, DKA, Seizures. High: See full list." : "Solo UNA categoría. La de MAYOR riesgo tiene precedencia. Bajo: Asma, Bronquiolitis, Croup, Apnea obstructiva, CAD, Convulsiones. Alto: Ver lista completa."}>
                     <select 
                       value={form.outcome.riskCategory || ''} 
                       onChange={e => setForm(f=>({...f, outcome: {...f.outcome, riskCategory: e.target.value as any, riskSubtype: ''}}))} 
@@ -1035,24 +1077,27 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                <div className="flex flex-col justify-center items-center p-8 bg-blue-50 border border-blue-100 rounded-3xl">
                   <div className="w-40 h-40 rounded-full border-[12px] border-[#204071] flex items-center justify-center bg-white shadow-xl">
                     <div className="text-center">
-                      <span className="text-3xl font-black text-[#204071]">{calculatedPIM3 ? <>{calculatedPIM3.prob}<span className="text-lg">%</span></> : '---'}</span>
+                      <span className="text-3xl font-black text-[#204071]">{!calculatedPIM3?.error ? <>{calculatedPIM3?.prob}<span className="text-lg">%</span></> : ''}</span>
                     </div>
                   </div>
                   <h3 className="mt-6 font-black text-[#204071] text-lg">{isEn ? 'Mortality Probability' : 'Probabilidad de Mortalidad'}</h3>
                   <p className="text-sm text-center text-blue-800/60 mt-2">{isEn ? 'Calculated automatically using the official Pediatric Index of Mortality 3 formula' : 'Calculado automáticamente usando la fórmula oficial del Índice Pediátrico de Mortalidad 3'}</p>
                </div>
-               <div className="flex flex-col justify-center p-8 bg-white border border-gray-200 rounded-3xl shadow-sm space-y-6 relative">
-                 {!calculatedPIM3 && (
-                   <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 border border-amber-200 rounded-3xl text-center">
+               <div className="flex flex-col justify-center p-8 bg-white border border-gray-200 rounded-3xl shadow-sm space-y-6 relative overflow-hidden">
+                 {calculatedPIM3?.error && (
+                   <div className="absolute inset-0 bg-white/95 backdrop-blur-sm z-10 flex flex-col items-center justify-center p-6 text-center">
                      <AlertTriangle className="w-8 h-8 text-amber-500 mb-3" />
-                     <p className="text-sm font-bold text-amber-800">
-                       {isEn ? 'PIM3 cannot be calculated until required physiological values are entered' : 'PIM3 no puede ser calculado hasta que se ingresen los valores fisiológicos requeridos'}
+                     <p className="text-sm font-bold text-amber-800 mb-2">
+                       {isEn ? 'Calculation unavailable: Missing required values' : 'Cálculo no disponible: Faltan valores requeridos'}
                      </p>
+                     <ul className="text-xs text-amber-700 text-left list-disc pl-4 space-y-1">
+                       {calculatedPIM3.missing?.map((m: string, i: number) => <li key={i}>{m}</li>)}
+                     </ul>
                    </div>
                  )}
                  <div>
                     <h4 className="text-sm font-bold uppercase text-gray-500 tracking-wider mb-2">{isEn ? 'Raw PIM3 Logit Score' : 'Puntaje Logit PIM3 Bruto'}</h4>
-                    <span className="text-4xl font-black text-gray-900">{calculatedPIM3 ? calculatedPIM3.score : '---'}</span>
+                    <span className="text-4xl font-black text-gray-900">{!calculatedPIM3?.error ? calculatedPIM3?.score : ''}</span>
                  </div>
                  <div className="pt-6 border-t border-gray-100 space-y-3">
                    <div className="flex justify-between items-center text-sm">
@@ -1131,9 +1176,20 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                <div className="h-full bg-blue-500 rounded-full transition-all duration-500 ease-out" style={{width: `${completionPercent}%`}}/>
             </div>
             
+            {calculatedPIM3?.error && (
+              <div className="mb-4 bg-amber-50 rounded-xl p-3 border border-amber-200">
+                <h4 className="text-[10px] font-black uppercase text-amber-800 tracking-wider mb-2 flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5"/> {isEn ? 'Cannot calculate PIM3 without:' : 'No es posible calcular PIM3 sin los siguientes campos:'}</h4>
+                <ul className="text-[11px] font-medium text-amber-900 list-disc pl-4 space-y-0.5">
+                  {calculatedPIM3.missing.map((errItem: string, idx: number) => (
+                    <li key={idx}>{errItem}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            
             <h4 className="text-[10px] font-black uppercase tracking-wider text-gray-400 mb-3">{isEn ? 'Pending Requirements' : 'Requisitos Pendientes'} ({missingCount})</h4>
             <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
-               {missingFields.map((nf,i) => (
+               {missingFields.filter(f => !calculatedPIM3?.error || !calculatedPIM3.missing.some((m:string) => m.toLowerCase().includes('pim3') || m.includes(f.label) || f.label.includes(m))).map((nf,i) => (
                  <button 
                    key={i} 
                    onClick={() => document.getElementById(`sect-${nf.sectionId}`)?.scrollIntoView({ behavior: 'smooth' })}
@@ -1339,10 +1395,23 @@ function Section({ id, title, children }: any) {
   );
 }
 
-function FormField({ label, children }: any) {
+function FormField({ label, children, tooltip }: any) {
   return (
     <div className="space-y-2 w-full">
-      <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider inline-block">{label}</label>
+      <div className="flex items-center gap-1.5">
+        <label className="text-[10px] font-black uppercase text-gray-500 tracking-wider inline-block">{label}</label>
+        {tooltip && (
+          <div className="group relative z-10 flex items-center justify-center cursor-help">
+            <svg className="w-3.5 h-3.5 text-blue-400 hover:text-blue-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 border border-gray-700 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200">
+               <p className="text-xs font-medium text-white leading-relaxed normal-case tracking-normal">{tooltip}</p>
+               <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+            </div>
+          </div>
+        )}
+      </div>
       {React.cloneElement(children as any, { 
          className: cn("w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-[#204071] focus:ring-4 focus:ring-blue-500/10 transition-all font-medium text-sm", children.props.className) 
       })}
