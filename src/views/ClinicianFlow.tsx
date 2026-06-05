@@ -157,7 +157,7 @@ const PRIMARY_DIAGNOSES: { id: string, label: I18nString }[] = [
 export default function ClinicianFlow({ onComplete, onSave, onExit, state, editMrn }: ClinicianFlowProps) {
   const { language } = useLanguage();
   const isEn = language === 'en';
-  const [fio2Warning, setFio2Warning] = useState<string | null>(null);
+  const [fio2Msg, setFio2Msg] = useState<{type: 'info'|'error', text: string} | null>(null);
   const [duplicateModal, setDuplicateModal] = useState<{mrn: string, count: number, records: Patient[]} | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [activeSection, setActiveSection] = useState('identification');
@@ -276,7 +276,14 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     if (form.outcome.systolicBP === '' || Number(form.outcome.systolicBP) < 0 || Number(form.outcome.systolicBP) > 300) missing.push(isEn ? 'Systolic BP (0-300)' : 'PAS (0-300)');
     if (form.outcome.baseExcess === '') missing.push(isEn ? 'Base Excess' : 'Exceso Base');
     if (form.outcome.paO2 === '' || Number(form.outcome.paO2) < 0) missing.push(isEn ? 'PaO2' : 'PaO2');
-    if (form.outcome.fiO2 === '' || Number(form.outcome.fiO2) < 0.21 || Number(form.outcome.fiO2) > 1) missing.push(isEn ? 'FiO2 (0.21-1.0)' : 'FiO2 (0.21-1.0)');
+    
+    const rawFio2 = form.outcome.fiO2 === '' ? NaN : Number(form.outcome.fiO2);
+    const isFio2Invalid = isNaN(rawFio2) || rawFio2 < 0.21 || (rawFio2 > 1 && rawFio2 < 21) || rawFio2 > 100;
+    
+    if (isFio2Invalid) {
+      missing.push(isEn ? 'Invalid/Missing FiO2' : 'FiO2 inválida o faltante');
+    }
+    
     if (!form.outcome.riskCategory) missing.push(isEn ? 'Risk Diagnosis Category' : 'Categoría de Diagnóstico de Riesgo');
 
     if (!form.outcome.pim3RecordDateTime || !form.patient.admissionDate || !form.patient.admissionDate.includes('T')) {
@@ -304,7 +311,8 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
     score += ((sbp * sbp) * 0.0001);
     
     const pao2 = Number(form.outcome.paO2);
-    const fio2 = Number(form.outcome.fiO2); // Fraction 0.21-1.0
+    let fio2 = Number(form.outcome.fiO2); // Fraction 0.21-1.0
+    if (fio2 >= 21 && fio2 <= 100) fio2 = fio2 / 100;
     if (pao2 > 0) {
       score += (100 * (fio2 / pao2)) * 0.1716;
     }
@@ -386,7 +394,9 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
   }
 
   if (form.outcome.systolicBP === '' || Number(form.outcome.systolicBP) < 0 || Number(form.outcome.systolicBP) > 300) missingFields.push({ label: isEn ? 'Invalid/Missing SBP' : 'PAS inválida o faltante', sectionId: 'pim3' });
-  if (form.outcome.fiO2 === '' || Number(form.outcome.fiO2) < 21 || Number(form.outcome.fiO2) > 100) missingFields.push({ label: isEn ? 'Invalid/Missing FiO2' : 'FiO2 inválida o faltante', sectionId: 'pim3' });
+  const fFio2 = form.outcome.fiO2 === '' ? NaN : Number(form.outcome.fiO2);
+  const fio2Error = isNaN(fFio2) || fFio2 < 0.21 || (fFio2 > 1.0 && fFio2 < 21) || fFio2 > 100;
+  if (fio2Error) missingFields.push({ label: isEn ? 'Invalid/Missing FiO2' : 'FiO2 inválida o faltante', sectionId: 'pim3' });
   if (form.outcome.paO2 === '' || Number(form.outcome.paO2) < 0) missingFields.push({ label: isEn ? 'Invalid/Missing PaO2' : 'PaO2 inválida o faltante', sectionId: 'pim3' });
   if (form.outcome.baseExcess === '') missingFields.push({ label: isEn ? 'Base Excess Missing' : 'Exceso Base Faltante', sectionId: 'pim3' });
 
@@ -1085,36 +1095,43 @@ export default function ClinicianFlow({ onComplete, onSave, onExit, state, editM
                </select>
             </FormField>
             <FormField label={isEn ? "Systolic BP (mmHg)" : "Presión Sistólica (mmHg)"} tooltip={isEn ? "Use the FIRST recorded value (first ICU hour). Record 0 if cardiac arrest, 30 if shock with unmeasurable BP. Prefer arterial line if available." : "Use el PRIMER valor registrado (primera hora UCI). Registre 0 si paro cardíaco, 30 si shock con PA no medible. Preferir línea arterial si disponible."}><input type="number" min="0" value={form.outcome.systolicBP || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, systolicBP: Number(e.target.value)}}))} className="input" /></FormField>
-            <FormField label="FiO2 (0.21-1.0)" tooltip={isEn ? "Fraction (e.g. 0.21). If > 21 entered, it auto-converts to fraction." : "Fracción (ej. 0.21). Si ingresa > 21, se convierte automáticamente a fracción."}>
+            <FormField label="FiO2 (0.21-1.0)" tooltip={isEn ? "Fraction (e.g. 0.21). If 21-100 entered, it auto-converts to fraction." : "Fracción (ej. 0.21). Si ingresa 21-100, se convierte automáticamente a fracción."}>
                <div>
                  <input 
                    type="number" 
                    step="0.01" 
-                   value={form.outcome.fiO2 || ''} 
+                   value={form.outcome.fiO2 === '' ? '' : form.outcome.fiO2} 
                    onChange={e => {
+                     setForm(f=>({...f, outcome: {...f.outcome, fiO2: e.target.value as any}}));
+                     setFio2Msg(null);
+                   }}
+                   onBlur={e => {
                      let val = e.target.value;
                      if (val === '') {
-                       setForm(f=>({...f, outcome: {...f.outcome, fiO2: '' as any}}));
-                       setFio2Warning(null);
+                       setFio2Msg(null);
                        return;
                      }
                      let num = Number(val);
                      if (num >= 21 && num <= 100) {
                        const converted = num / 100;
-                       setFio2Warning(isEn ? `⚠️ FiO2 auto-converted from ${num}% to ${converted}. Verify.` : `⚠️ FiO2 convertido de ${num}% a ${converted}. Verifique.`);
-                       num = converted;
-                     } else if (num > 100 || num < 0.21) {
-                        setFio2Warning(isEn ? `❌ Invalid value (${num}). Must be 0.21-1.0` : `❌ Valor inválido (${num}). Debe ser 0.21-1.0`);
-                        setForm(f=>({...f, outcome: {...f.outcome, fiO2: '' as any}}));
-                        return;
+                       setFio2Msg({ type: 'info', text: isEn ? `FiO2 converted from ${num}% to ${converted}.` : `FiO2 convertido de ${num}% a ${converted}.` });
+                       setForm(f=>({...f, outcome: {...f.outcome, fiO2: converted}}));
+                     } else if (num > 100 || (num < 0.21 && num !== 0) || (num > 1 && num < 21)) {
+                        setFio2Msg({ type: 'error', text: isEn ? `Invalid FiO2. Accepted range: 0.21-1.00.` : `FiO2 inválido. Rango aceptado: 0.21-1.00.` });
+                     } else if (num === 1) {
+                        setFio2Msg(null);
+                        setForm(f=>({...f, outcome: {...f.outcome, fiO2: 1.0}}));
                      } else {
-                       setFio2Warning(null); 
+                       setFio2Msg(null); 
                      }
-                     setForm(f=>({...f, outcome: {...f.outcome, fiO2: num}}));
-                   }} 
+                   }}
                    className="input" 
                  />
-                 {fio2Warning && <p className="text-xs text-amber-600 font-bold mt-1">{fio2Warning}</p>}
+                 {fio2Msg && (
+                   <p className={`text-xs font-bold mt-1 ${fio2Msg.type === 'error' ? 'text-red-500' : 'text-blue-500'}`}>
+                     {fio2Msg.text}
+                   </p>
+                 )}
                </div>
             </FormField>
             <FormField label="PaO2 (mmHg)" tooltip={isEn ? "Use value from the FIRST hour of ICU admission. Must correspond to the SAME time as FiO2. Acceptable: 80-100 mmHg in room air." : "Usar valor de la PRIMERA hora de admisión UCI. Debe corresponder al mismo momento que FiO2. Valores aceptables: 80-100 mmHg en aire ambiente."}><input type="number" min="0" value={form.outcome.paO2 || ''} onChange={e=>setForm(f=>({...f, outcome: {...f.outcome, paO2: Number(e.target.value)}}))} className="input" /></FormField>
