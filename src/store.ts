@@ -5,6 +5,8 @@
 
 import { Patient, Outcome, ParentPatient, PatientType, UserRole, Institution, AppUser } from './types';
 import { format, subDays, addDays } from 'date-fns';
+import Papa from 'papaparse';
+import patientsCsvRaw from './data/patients.csv?raw';
 
 // Simple deterministic hash for demo purposes
 export function generatePatientHash(mrn: string, admissionDate: string): string {
@@ -83,92 +85,157 @@ export function generateSeedData() {
     }
   ];
 
-  const count = 250;
-  
-  for (let i = 0; i < count; i++) {
-    // Distribution: 40% Neo, 40% Pedia, 20% Adult
-    const rand = Math.random();
-    let type: PatientType = 'Pediatric';
-    if (rand < 0.4) type = 'Neonatal';
-    else if (rand > 0.8) type = 'Adult';
+  const parsed = Papa.parse(patientsCsvRaw, {
+    header: true,
+    skipEmptyLines: true
+  });
+
+  // Clear drafts and existing local data for demo consistency
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('autosave_draft_')) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (e) {
+    // Ignore if not available
+  }
+
+  const hospitals = ['Hospital Central', 'Clínica San Luis', 'General Pediatric'];
+  const cities = ['Bogotá', 'Medellín', 'Cali'];
+  const countries = ['Colombia', 'USA', 'Mexico'];
+
+  let seqId = 1000;
+
+  parsed.data.forEach((row: any) => {
+    // Generate simple data for missing fields
+    const rHospital = hospitals[Math.floor(Math.random() * hospitals.length)];
+    const rCity = cities[Math.floor(Math.random() * cities.length)];
+    const rCountry = countries[Math.floor(Math.random() * countries.length)];
     
-    const mrn = `HRN-${Math.floor(Math.random() * 90000000 + 10000000)}`;
+    let mrn = row['MRN'] || `HRN-${Math.floor(Math.random() * 90000000 + 10000000)}`;
     const admissionDate = format(subDays(new Date(), Math.floor(Math.random() * 120 + 30)), 'yyyy-MM-dd');
-    const dischargeDate = format(addDays(new Date(admissionDate), Math.floor(Math.random() * 20 + 2)), 'yyyy-MM-dd');
     const hash = generatePatientHash(mrn, admissionDate);
-    
-    const hospitals = ['Hospital Central', 'Clínica San Luis', 'General Pediatric', 'Metropolitan Health'];
-    const cities = ['Bogotá', 'Medellín', 'Cali', 'Barranquilla'];
-    const countries = ['Colombia', 'USA', 'Mexico', 'Spain'];
+
+    seqId++;
+
+    let genderStr = row['Genero'];
+    let fullGender = 'Unknown';
+    if (genderStr === 'M') fullGender = 'Male';
+    if (genderStr === 'F') fullGender = 'Female';
 
     patients.push({
       id: Math.random().toString(36).substr(2, 9),
-      identifier: `${Math.floor(Math.random() * 100000000)}`,
-      gender: ['Male', 'Female'][Math.floor(Math.random() * 2)],
-      mrn,
-      name: `Patient Name ${i}`,
-      birthDate: '2020-01-01',
-      type,
+      identifier: `${seqId}`,
+      gender: fullGender,
+      mrn: mrn,
+      name: row['Nombre_Paciente'] || `Patient ${seqId}`,
+      birthDate: row['Fecha_Nacimiento'] || '2020-01-01',
+      type: 'Pediatric',
       admissionDate,
-      dischargeDate,
+      dischargeDate: format(addDays(new Date(admissionDate), parseInt(row['Dias_VM'] || '5') + 2), 'yyyy-MM-dd'),
       patientHash: hash,
-      hospital: hospitals[Math.floor(Math.random() * hospitals.length)],
+      hospital: rHospital,
       institutionId: 'inst-1',
-      city: cities[Math.floor(Math.random() * cities.length)],
-      country: countries[Math.floor(Math.random() * countries.length)]
+      city: rCity,
+      country: rCountry
     });
+
+    let isLiving = true;
+    if (row['Desenlace_Paciente'] === '2' || row['Mortalidad'] === '1' || row['Status'] === 'Deceased') {
+        isLiving = false;
+    } else if (row['Desenlace_Paciente'] === '1' || row['Mortalidad'] === '2') {
+        isLiving = true;
+    }
     
-    // Simulate outcomes
-    // Logic: Higher education progress = lower mortality (simulated correlation)
-    const educationActivated = Math.random() > 0.3;
-    const educationProgress = educationActivated ? Math.floor(Math.random() * 100) : 0;
+    let ageRaw = parseFloat(row['Edad_Intubacion']) || 1;
+    let weightRaw = parseFloat(row['Peso_kg']) || 10;
     
-    // Mortality probability logic
-    let mortalityChance = 0.15;
-    if (type === 'Neonatal') mortalityChance += 0.05;
-    if (educationProgress > 70) mortalityChance -= 0.10;
-    if (Math.random() < 0.1) mortalityChance += 0.2; // random critical event
+    // Extubation logic
+    let accidentalExtubation = (row['Extubacion_Accidental'] === '1' || row['Extubacion_Accidental'] === 'SI') ? 1 : 2;
+
+    const ettSizeStr = row['Tamano_ETT_Usado'];
+    const ettSize = ettSizeStr ? parseFloat(ettSizeStr) : undefined;
+    const ettCuffed = row['ETT_Con_Balon'] === '1' || row['ETT_Con_Balon'] === 'SI';
     
-    const isLiving = Math.random() > mortalityChance;
-    const hadExtubation = Math.random() < (isLiving ? 0.05 : 0.2);
+    // Calculaate ETT Expected Size
+    const calcExpectedEtt = (age: number, cuffed: boolean) => {
+        if (age < 1) {
+            if (age < 0.25) return cuffed ? 3.0 : 3.5;
+            if (age <= 0.5) return cuffed ? 3.5 : 4.0;
+            return cuffed ? 3.5 : 4.0;
+        }
+        return cuffed ? (age / 4) + 3.5 : (age / 4) + 4.0;
+    }
+    const ettExpectedSize = calcExpectedEtt(ageRaw, ettCuffed);
+    const ettAdequate = ettSize ? Math.abs(ettSize - ettExpectedSize) <= 0.5 : false;
+
+    // Simulate simple PIM3 Risk logic based on inputs
+    let baseExcess = parseFloat(row['PIM3_Base_Excess']) || 0;
+    let sbp = parseFloat(row['PIM3_SBP_mmHg']) || 90;
+    let fio2 = parseFloat(row['PIM3_FiO2_Porcentaje']) || 21;
+    let pao2 = parseFloat(row['PIM3_PaO2_mmHg']) || 100;
+    let pupils = row['PIM3_Pupilas_Reactivas'] === '1' ? 1 : 0;
+    let mv = row['VM_Primera_Hora'] === '1' || row['VM_Primera_Hora'] === 'SI';
+    let highRisk = row['PIM3_Riesgo_Alto'] ? parseInt(row['PIM3_Riesgo_Alto']) : 0;
+    let veryHighRisk = row['PIM3_Riesgo_Muy_Alto'] ? parseInt(row['PIM3_Riesgo_Muy_Alto']) : 0;
+
+    let pimScore = 0;
+    if (sbp < 90) pimScore += 1;
+    if (Math.abs(baseExcess) > 5) pimScore += 1;
+    if (pupils === 0) pimScore += 2;
+    if (mv) pimScore += 1;
+    if (fio2 > 0 && pao2/fio2 < 2) pimScore += 1;
+    if (highRisk > 0) pimScore += 2;
+    if (veryHighRisk > 0) pimScore += 3;
+    let mortProb = Math.min(100, Math.max(0, pimScore * 8.5)); // rough estimate mapping
     
     outcomes.push({
       patientHash: hash,
-      age: type === 'Adult' ? Math.floor(Math.random() * 60 + 20) : parseFloat((Math.random() * 15).toFixed(1)),
-      weight: type === 'Adult' ? Math.floor(Math.random() * 40 + 60) : Math.floor(Math.random() * 30 + 3),
-      systolicBP: Math.floor(Math.random() * 40 + 80),
-      fiO2: 45,
-      paO2: 85,
-      baseExcess: -2.5,
-      pupils: 1,
-      electiveAdmission: false,
-      mechanicalVentilation: true,
-      surgeryRecovery: 0,
+      age: ageRaw,
+      weight: weightRaw,
+      systolicBP: sbp,
+      fiO2: fio2,
+      paO2: pao2,
+      baseExcess: baseExcess,
+      pupils: pupils as 0|1,
+      electiveAdmission: row['Admision_Electiva_UCI'] === 'SI' || row['Admision_Electiva_UCI'] === '1',
+      mechanicalVentilation: mv,
+      surgeryRecovery: parseInt(row['PIM3_Recuperacion_Cirugia']) as 0|1|2|3 || 0,
       weightedDiagnosis: 'None',
-      pim3LowRiskDiagnosis: false,
-      pim3HighRiskDiagnosis: false,
-      pim3VeryHighRiskDiagnosis: false,
-      pim3Score: 0,
-      mortalityProbability: 5,
-      diagnosis: DIAGNOSES[Math.floor(Math.random() * DIAGNOSES.length)],
-      intubated: Math.random() > 0.5 ? 1 : 2,
-      ventilationDays: Math.floor(Math.random() * 10),
-      accidentalExtubation: hadExtubation ? 1 : 2,
+      pim3LowRiskDiagnosis: row['PIM3_Riesgo_Bajo'] ? (parseInt(row['PIM3_Riesgo_Bajo']) as 0|1|2) : 0,
+      pim3HighRiskDiagnosis: highRisk as 0|1|2,
+      pim3VeryHighRiskDiagnosis: veryHighRisk as 0|1|2,
+      pim3Score: pimScore,
+      mortalityProbability: mortProb,
+      diagnosis: row['Diagnostico_Principal_PIM3'] || DIAGNOSES[Math.floor(Math.random() * DIAGNOSES.length)],
+      intubated: (row['Intubado_UCI'] === 'SI' || row['Intubado_UCI'] === '1') ? 1 : 2,
+      ventilationDays: parseFloat(row['Dias_VM']) || 0,
+      accidentalExtubation: accidentalExtubation as 1|2,
       status: isLiving ? 'Living' : 'Deceased',
-      createdAt: dischargeDate
+      createdAt: format(new Date(), 'yyyy-MM-dd'),
+      ettSize: ettSize,
+      ettCuffed: ettCuffed,
+      ettExpectedSize: ettExpectedSize,
+      ettAdequate: ettAdequate,
+      electiveTubeChange: row['Cambio_Electivo_ETT'] === '1' || row['Cambio_Electivo_ETT'] === 'SI',
+      electiveExtubation: row['Extubacion_Electiva'] === '1' || row['Extubacion_Electiva'] === 'SI',
+      tracheostomy: row['Traqueostomia'] === '1' || row['Traqueostomia'] === 'SI' ? 1 : 2,
+      tracheostomyDate: row['Fecha_Traqueostomia'] || undefined
     });
     
     parentPatients.push({
       id: Math.random().toString(36).substr(2, 9),
       patientHash: hash,
-      name: `Parent/Patient ${i}`,
+      name: `Parent of ${row['Nombre_Paciente'] || 'Patient'}`,
       phone: `+1 555-${Math.floor(Math.random() * 900 + 100)}-${Math.floor(Math.random() * 9000 + 1000)}`,
-      email: `user${i}@example.com`,
+      email: `parent${seqId}@example.com`,
       consent: true,
-      educationActivated,
-      educationProgress
+      educationActivated: true,
+      educationProgress: Math.floor(Math.random() * 100)
     });
-  }
+  });
   
   return { patients, outcomes, parentPatients, institutions, users };
 }
