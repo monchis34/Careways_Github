@@ -7,6 +7,7 @@ import {
   Calendar, MapPin, Search, Wind, Droplets, Baby, Upload, User, Layout, Plus, Clock, Info, ShieldCheck, PlayCircle, Printer, Download, Pill, Stethoscope, AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { generateClinicalReport } from '../utils/pdfGenerator';
 import { cn } from '../lib/utils';
 
 interface PatientReportViewProps {
@@ -107,7 +108,10 @@ export default function PatientReportView({ state, patientHash, onBack }: Patien
                </div>
              </div>
              
-             <button className="flex items-center gap-2 bg-[#204071] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all">
+             <button 
+               onClick={() => generateClinicalReport(patient, outcome, state)}
+               className="flex items-center gap-2 bg-[#204071] text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm hover:shadow-md transition-all"
+             >
                <Printer className="w-4 h-4" /> {t.patientReport.generateReport}
              </button>
           </div>
